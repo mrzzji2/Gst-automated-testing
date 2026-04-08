@@ -1,0 +1,13 @@
+# Production Environment Configuration
+app:
+  environment: prod
+
+urls:
+  base: https://www.example.com
+
+browser:
+  headless: true
+  slow_mo: 0
+
+logging:
+  level: WARNING

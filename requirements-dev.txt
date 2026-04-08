@@ -1,0 +1,16 @@
+# Development Dependencies
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+pytest-timeout==2.3.1
+pytest-randomly==3.16.0
+faker==33.1.0
+
+# Code Quality
+black==24.10.0
+flake8==7.1.1
+pylint==3.3.2
+mypy==1.14.1
+
+# Type Stubs
+types-PyYAML==6.0.12.20241230
+types-requests==2.32.0.20241016

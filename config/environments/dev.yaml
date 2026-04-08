@@ -1,0 +1,13 @@
+# Development Environment Configuration
+app:
+  environment: dev
+
+urls:
+  base: https://dev.example.com
+
+browser:
+  headless: false
+  slow_mo: 100
+
+logging:
+  level: DEBUG

@@ -1,0 +1,84 @@
+{
+  "name": "web-automation-framework",
+  "version": "1.0.0",
+  "description": "Web Automation Test Framework using Playwright with Python",
+
+  "browsers": {
+    "chromium": {
+      "channel": "chrome",
+      "downloadURL": "https://playwright.azureedge.net/builds/chromium/"
+    },
+    "firefox": {
+      "channel": "firefox",
+      "downloadURL": "https://playwright.azureedge.net/builds/firefox/"
+    },
+    "webkit": {
+      "channel": "webkit",
+      "downloadURL": "https://playwright.azureedge.net/builds/webkit/"
+    }
+  },
+
+  "launchOptions": {
+    "headless": true,
+    "slowMo": 0,
+    "timeout": 30000,
+    "args": [
+      "--start-maximized",
+      "--disable-infobars",
+      "--disable-extensions",
+      "--disable-gpu",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-web-security"
+    ]
+  },
+
+  "contextOptions": {
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "locale": "en-US",
+    "timezoneId": "America/New_York",
+    "ignoreHTTPSErrors": true,
+    "acceptDownloads": true,
+    "bypassCSP": true
+  },
+
+  "screenshot": {
+    "type": "png",
+    "quality": 80,
+    "fullPage": true
+  },
+
+  "video": {
+    "enabled": true,
+    "size": {
+      "width": 1920,
+      "height": 1080
+    },
+    "dir": "reports/videos"
+  },
+
+  "trace": {
+    "enabled": true,
+    "dir": "reports/traces"
+  },
+
+  "retries": 2,
+
+  "workers": 4,
+
+  "reporter": [
+    ["html", { "outputFolder": "reports/html", "open": "never" }],
+    ["json", { "outputFile": "reports/results.json" }],
+    ["junit", { "outputFile": "reports/junit/results.xml" }]
+  ],
+
+  "use": {
+    "trace": "retain-on-failure",
+    "screenshot": "only-on-failure",
+    "video": "retain-on-failure"
+  }
+}

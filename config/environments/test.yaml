@@ -1,0 +1,13 @@
+# Test Environment Configuration
+app:
+  environment: test
+
+urls:
+  base: https://test.example.com
+
+browser:
+  headless: true
+  slow_mo: 0
+
+logging:
+  level: INFO
