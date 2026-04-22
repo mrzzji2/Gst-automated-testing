@@ -1,0 +1,8 @@
+Page Inspection Results
+============================================================
+Final URL: https://doc-online-test.gstyun.cn/webClinic/index.html#/home
+Page Title: 固生堂中医-工作台
+
+Patient Elements:
+  [class*='patient']: 290 elements
+  li: 127 elements

@@ -87,14 +87,12 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*", "*Tests"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
 addopts = [
     "-v",
     "--strict-markers",
     "--tb=short",
-    "--html=reports/html/report.html",
-    "--self-contained-html",
     "--alluredir=reports/allure",
-    "--junitxml=reports/junit/results.xml",
 ]
 markers = [
     "smoke: Quick smoke tests",

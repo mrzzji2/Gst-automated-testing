@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__take_snapshot",
+      "Bash(timeout 60 cmd /c \"echo Waiting for Playwright installation...\")",
+      "Bash(ping 127.0.0.1 -n 30)",
+      "Bash(python -c \"from playwright.sync_api import sync_playwright; p = sync_playwright\\(\\).start\\(\\); print\\('Browser check: OK'\\); p.stop\\(\\)\")",
+      "Bash(python -m pytest tests/test_cases/test_online_consultation.py::TestOnlineConsultation::test_enter_online_consultation_page --headed --channel=chrome -v -s --tb=short --asyncio-mode=auto)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/test_cases/test_online_consultation.py::TestOnlineConsultation::test_enter_online_consultation_page --headed -v -s --tb=short --asyncio-mode=auto --browser-channel=chrome)",
+      "Bash(python -m pytest tests/test_cases/test_online_consultation.py::TestOnlineConsultation::test_enter_online_consultation_page --headed -v -s --tb=short --asyncio-mode=auto --confcutdir=tests -o confcutdir=tests --rootdir=tests)",
+      "Bash(python -c \"import sys; sys.stdout.reconfigure\\(encoding='utf-8'\\)\")",
+      "Bash(python -m pytest tests/test_cases/test_online_consultation.py::TestOnlineConsultation::test_enter_online_consultation_page --headed -v -s --tb=short --asyncio-mode=strict --browser-channel=chrome)",
+      "mcp__chrome-devtools__fill"
+    ]
+  }
+}

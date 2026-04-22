@@ -73,7 +73,7 @@ class BasePage:
         """获取当前URL"""
         return self.page.url
 
-    def get_page_title(self) -> str:
+    async def get_page_title(self) -> str:
         """获取页面标题"""
         return await self.page.title()
 

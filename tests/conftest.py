@@ -1,6 +1,6 @@
 """
-Pytest Configuration File
-核心配置：fixture、钩子、失败截图
+Pytest Configuration File - Simplified
+Core fixtures for GST Online Consultation testing
 """
 import os
 import sys
@@ -8,399 +8,266 @@ import asyncio
 import pytest
 import allure
 from pathlib import Path
-from typing import AsyncGenerator, Dict, Any
+from typing import AsyncGenerator
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
-from loguru import logger
 
-# 添加项目根目录到路径
+# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from utils.config import config
-from utils.logger import setup_logger, logger as test_logger
-from utils.screenshot import screenshot_utils
-from utils.webdriver import WebDriverManager
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
-
-# ==================== 日志配置 ====================
-setup_logger(
-    log_level=config.log_level,
-    log_path="logs/auto",
-    console_output=True,
-    file_output=True
-)
-
+# Logger
+from loguru import logger as test_logger
 
 # ==================== Pytest Fixtures ====================
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """创建事件循环"""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 async def browser_type():
-    """启动 Playwright"""
+    """Start Playwright"""
     async with async_playwright() as p:
         yield p
 
 
 @pytest.fixture(scope="function")
 async def browser(browser_type) -> AsyncGenerator[Browser, None]:
-    """
-    启动浏览器
-
-    支持命令行参数：
-    --browser: chromium, firefox, webkit
-    --headed: 有头模式
-    --channel: 浏览器通道
-    """
-    # 获取命令行参数
-    browser_name = pytest.config.getoption("--browser", default=config.browser_type)
-    headed = pytest.config.getoption("--headed", default=not config.browser_headless)
-    channel = pytest.config.getoption("--channel", default=config.browser_channel)
-
-    # 启动浏览器
-    browser = await browser_type[browser_name].launch(
-        headless=not headed,
-        channel=channel if browser_name == "chromium" else None,
+    """Launch browser"""
+    browser = await browser_type.chromium.launch(
+        headless=False,
+        channel="chrome",
         args=["--start-maximized"],
-        slow_mo=config.get_int("browser.slow_mo", 0)
+        slow_mo=0
     )
-
-    test_logger.info(f"Browser started: {browser_name} (headed={headed})")
-
+    test_logger.info("Browser started: chromium (headed=True)")
     yield browser
-
-    # 清理
     await browser.close()
     test_logger.info("Browser closed")
 
 
 @pytest.fixture(scope="function")
 async def context(browser: Browser) -> AsyncGenerator[BrowserContext, None]:
-    """
-    创建浏览器上下文
+    """Create browser context with saved login state"""
+    viewport = {"width": 1920, "height": 1080}
+    storage_state_file = project_root / "tests" / "storage_state.json"
 
-    支持命令行参数：
-    --viewport: 视口大小 (1920x1080)
-    """
-    # 获取视口配置
-    viewport = config.get_dict("browser.viewport", {"width": 1920, "height": 1080})
-
-    # 创建上下文
-    context = await browser.new_context(
-        viewport=viewport,
-        locale="en-US",
-        timezone_id="America/New_York",
-        ignore_https_errors=True,
-        accept_downloads=True,
-        record_video_dir="reports/videos" if config.video_enabled else None,
-        record_video_size={"width": 1920, "height": 1080} if config.video_enabled else None
-    )
-
-    test_logger.info(f"Browser context created")
+    # 如果存在保存的登录状态，直接使用；否则创建新的 context
+    if storage_state_file.exists():
+        context = await browser.new_context(
+            viewport=viewport,
+            locale="zh-CN",
+            ignore_https_errors=True,
+            accept_downloads=True,
+            storage_state=str(storage_state_file)  # 加载保存的登录状态
+        )
+        test_logger.info("Browser context created with saved login state")
+    else:
+        context = await browser.new_context(
+            viewport=viewport,
+            locale="zh-CN",
+            ignore_https_errors=True,
+            accept_downloads=True
+        )
+        test_logger.info("Browser context created (no saved state)")
 
     yield context
-
-    # 清理
     await context.close()
     test_logger.info("Browser context closed")
 
 
 @pytest.fixture(scope="function")
 async def page(context: BrowserContext) -> AsyncGenerator[Page, None]:
-    """
-    创建页面
-
-    这是测试中最常用的 fixture
-    """
-    # 创建页面
+    """Create page"""
     page = await context.new_page()
-
-    # 设置默认超时
-    page.set_default_timeout(config.timeout_default)
-    page.set_default_navigation_timeout(config.timeout_navigation)
-
-    test_logger.info(f"New page created")
-
+    page.set_default_timeout(30000)
+    page.set_default_navigation_timeout(30000)
+    test_logger.info("New page created")
     yield page
-
-    # 清理
     await page.close()
     test_logger.info("Page closed")
 
 
-@pytest.fixture(scope="function")
-async def base_url() -> str:
-    """
-    获取基础URL
-
-    支持命令行参数：
-    --base-url: 基础URL
-    """
-    return pytest.config.getoption("--base-url", default=config.base_url)
+@pytest.fixture(scope="session")
+def base_url() -> str:
+    """Get base URL"""
+    return os.getenv("GST_BASE_URL", "https://doc-online-test.gstyun.cn/webClinic/index.html")
 
 
 # ==================== Page Object Fixtures ====================
 
 @pytest.fixture(scope="function")
-async def login_page(page: Page, base_url: str):
-    """登录页面对象"""
-    from pages.login_page import LoginPage
-    return LoginPage(page, base_url)
+async def online_consultation_page(page: Page, base_url: str):
+    """Online consultation page object"""
+    from pages.online_consultation_page import OnlineConsultationPage
+    return OnlineConsultationPage(page, base_url)
 
 
 @pytest.fixture(scope="function")
-async def dashboard_page(page: Page, base_url: str):
-    """仪表盘页面对象"""
-    from pages.dashboard_page import DashboardPage
-    return DashboardPage(page, base_url)
-
-
-@pytest.fixture(scope="function")
-async def user_management_page(page: Page, base_url: str):
-    """用户管理页面对象"""
-    from pages.user_management_page import UserManagementPage
-    return UserManagementPage(page, base_url)
-
-
-# ==================== 认证 Fixtures ====================
-
-@pytest.fixture(scope="function")
-async def authenticated_page(page: Page, base_url: str) -> AsyncGenerator[Page, None]:
+async def gst_online_consultation_page(page: Page, base_url: str):
     """
-    已认证的页面
+    Authenticated online consultation page object for GST platform
 
-    自动登录并返回已认证的页面
+    Auto-login and return authenticated page object
+    Uses saved login state if available, otherwise performs login and saves state
+
+    This fixture ensures:
+    1. User is logged in
+    2. Page is on the online consultation page (#/home)
+    3. Doctor is selected
     """
-    from pages.login_page import LoginPage
+    from pages.online_consultation_page import OnlineConsultationPage
 
-    # 获取测试账号
-    username = os.getenv("TEST_USER_USERNAME", "test@example.com")
-    password = os.getenv("TEST_USER_PASSWORD", "password")
+    # Get test credentials
+    username = os.getenv("GST_USERNAME", "17671792742")
+    password = os.getenv("GST_PASSWORD", "123456")
+    doctor_name = os.getenv("GST_DOCTOR_NAME", "罗慧")
 
-    # 执行登录
-    login_page = LoginPage(page, base_url)
-    await login_page.goto_login()
-    await login_page.login(username, password)
+    # Storage state file path
+    storage_state_file = project_root / "tests" / "storage_state.json"
 
-    # 等待导航完成
-    await page.wait_for_url("**/dashboard", timeout=10000)
+    # Create page object
+    online_page = OnlineConsultationPage(page, base_url)
 
-    test_logger.info(f"User authenticated: {username}")
+    # Navigate to home page
+    await online_page.goto_online_consultation()
 
-    yield page
+    # 等待页面加载
+    await page.wait_for_timeout(2000)
 
-    # 登出（可选）
-    # await page.click("//a[contains(text(), 'Logout')]")
+    # 检查是否需要登录（如果不在登录页面，说明已使用保存的状态登录）
+    if "#/login" in page.url:
+        test_logger.info("No saved login state found, performing login...")
+        # 需要登录
+        try:
+            # 等待登录表单出现
+            await page.wait_for_selector("input[placeholder*='手机号']", timeout=10000)
+            test_logger.info("Login page loaded, filling credentials...")
 
+            # 填写手机号和验证码
+            await page.fill("input[placeholder*='手机号']", username)
+            await page.fill("input[placeholder*='验证码']", password)
+            test_logger.info(f"Credentials filled: {username}")
 
-@pytest.fixture(scope="function")
-async def admin_page(page: Page, base_url: str) -> AsyncGenerator[Page, None]:
-    """
-    管理员认证的页面
+            # 直接点击登录按钮（不点击"获取验证码"）
+            await page.click("button:has-text('登录')")
+            test_logger.info("Login button clicked")
 
-    使用管理员账号登录
-    """
-    from pages.login_page import LoginPage
+            # 等待页面跳转
+            await page.wait_for_timeout(3000)
 
-    # 获取管理员账号
-    username = os.getenv("TEST_ADMIN_USERNAME", "admin@example.com")
-    password = os.getenv("TEST_ADMIN_PASSWORD", "admin_password")
+            # 登录后选择医生
+            test_logger.info("Waiting for doctor selection dialog...")
+            await page.wait_for_timeout(2000)
+            current_url = page.url
+            test_logger.info(f"Current URL before doctor selection: {current_url}")
 
-    # 执行登录
-    login_page = LoginPage(page, base_url)
-    await login_page.goto_login()
-    await login_page.login(username, password)
+            # 如果还在登录页面，说明登录失败
+            if "#/login" in current_url:
+                raise Exception("Login failed - still on login page")
 
-    # 等待导航完成
-    await page.wait_for_url("**/dashboard", timeout=10000)
+            # 检查是否有对话框
+            try:
+                dialog_found = False
+                dialogs = page.locator("dialog, .dialog, [role='dialog']")
+                if await dialogs.count() > 0:
+                    dialog_found = True
+                    test_logger.info(f"Found {await dialogs.count()} dialog(s)")
 
-    test_logger.info(f"Admin authenticated: {username}")
+                radios = page.locator("input[type='radio'], [role='radio']")
+                if await radios.count() > 0:
+                    dialog_found = True
+                    test_logger.info(f"Found {await radios.count()} radio button(s)")
 
-    yield page
+                if dialog_found:
+                    test_logger.info("Doctor selection dialog found")
+                    doctor_radio = page.locator(f"radio:has-text('{doctor_name}')")
+                    if await doctor_radio.count() > 0:
+                        await doctor_radio.first.click()
+                        test_logger.info(f"Selected doctor: {doctor_name}")
+                    else:
+                        await radios.first.click()
+                        test_logger.info("Selected first available doctor")
 
+                    await page.wait_for_timeout(500)
+                    await page.click("button:has-text('确认'), button:has-text('确认切换')")
+                    test_logger.info("Confirmed doctor selection")
+                    await page.wait_for_timeout(2000)
 
-# ==================== 测试数据 Fixtures ====================
+            except Exception as e:
+                test_logger.warning(f"Doctor selection process issue: {e}")
 
-@pytest.fixture(scope="session")
-def test_user() -> Dict[str, str]:
-    """测试用户数据"""
-    return {
-        "username": os.getenv("TEST_USER_USERNAME", "test@example.com"),
-        "password": os.getenv("TEST_USER_PASSWORD", "password123"),
-        "first_name": "Test",
-        "last_name": "User"
-    }
+            # 保存登录状态到文件
+            test_logger.info("Saving login state to file...")
+            await page.context.storage_state(path=str(storage_state_file))
+            test_logger.info(f"Login state saved to: {storage_state_file}")
 
+        except Exception as e:
+            test_logger.error(f"Login failed: {e}")
+            raise
+    else:
+        test_logger.info("Using saved login state - already authenticated")
 
-@pytest.fixture(scope="session")
-def test_admin() -> Dict[str, str]:
-    """测试管理员数据"""
-    return {
-        "username": os.getenv("TEST_ADMIN_USERNAME", "admin@example.com"),
-        "password": os.getenv("TEST_ADMIN_PASSWORD", "admin123"),
-        "first_name": "Admin",
-        "last_name": "User"
-    }
+    # 验证已在在线问诊页面
+    current_url = page.url
+    if "#/login" in current_url:
+        raise Exception(f"Login verification failed - still on login page: {current_url}")
 
+    test_logger.info(f"GST authenticated: {username} as doctor {doctor_name}")
+    test_logger.info(f"Successfully entered online consultation page: {current_url}")
 
-@pytest.fixture(scope="function")
-def new_user_data():
-    """新用户数据（每次生成不同的）"""
-    import random
-    import string
-
-    random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-    return {
-        "username": f"testuser_{random_suffix}",
-        "email": f"testuser_{random_suffix}@example.com",
-        "first_name": "New",
-        "last_name": f"User {random_suffix}",
-        "password": "Password123!",
-        "role": "user",
-        "status": "active"
-    }
+    return online_page
 
 
 # ==================== Pytest Hooks ====================
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """
-    测试报告钩子
-    失败时自动截图
-    """
+    """Test report hook - screenshot on failure"""
     outcome = yield
     report = outcome.get_result()
 
-    # 只在测试调用阶段处理
     if report.when == "call":
-        # 获取 page fixture（如果存在）
         page = None
         if "page" in item.fixturenames:
             page = item.funcargs.get("page")
 
-        # 测试失败时截图
-        if report.failed and page is not None and config.screenshot_on_failure:
+        if report.failed and page is not None:
             try:
-                # 获取测试名称
                 test_name = item.nodeid.replace("::", "_").replace("/", "_")
+                screenshot_path = f"reports/screenshots/failure_{test_name}.png"
 
-                # 截图
-                asyncio.run(screenshot_utils.capture_on_failure(
-                    page,
-                    test_name,
-                    str(call.excinfo.value) if call.excinfo else None
-                ))
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(screenshot_path), exist_ok=True)
 
-                # 添加到 Allure 报告
-                screenshot_path = f"reports/screenshots/failure_{test_name}_*.png"
-                allure.attach.file(
-                    screenshot_path,
-                    name="Failure Screenshot",
-                    attachment_type=allure.attachment_type.PNG
-                )
+                # Sync screenshot using asyncio.run
+                try:
+                    asyncio.run(page.screenshot(path=screenshot_path))
+                except RuntimeError:
+                    # Event loop is running, use sync_screenshot if available
+                    pass
+
+                # Attach to Allure report if file exists
+                if os.path.exists(screenshot_path):
+                    allure.attach.file(screenshot_path, name="Failure Screenshot", attachment_type=allure.attachment_type.PNG)
             except Exception as e:
                 test_logger.warning(f"Failed to capture screenshot: {e}")
 
 
 def pytest_configure(config):
-    """
-    Pytest 配置钩子
-    注册自定义标记和命令行选项
-    """
-    # 注册自定义标记
+    """Pytest configure hook - register custom markers"""
     config.addinivalue_line("markers", "smoke: 冒烟测试")
     config.addinivalue_line("markers", "regression: 回归测试")
-    config.addinivalue_line("markers", "sanity: 精简测试")
     config.addinivalue_line("markers", "api: API测试")
     config.addinivalue_line("markers", "ui: UI测试")
-    config.addinivalue_line("markers", "slow: 慢速测试")
-    config.addinivalue_line("markers", "flaky: 不稳定测试")
-    config.addinivalue_line("markers", "critical: 关键业务流程")
-
-    # 添加命令行选项
-    config.addoption("--browser", action="store", default="chromium", help="浏览器类型")
-    config.addoption("--headed", action="store_true", default=False, help="有头模式")
-    config.addoption("--channel", action="store", default="chrome", help="浏览器通道")
+    config.addinivalue_line("markers", "page: 页面标记")
+    config.addinivalue_line("markers", "P0: P0级别测试-核心流程")
+    config.addinivalue_line("markers", "P1: P1级别测试-重要功能")
+    config.addinivalue_line("markers", "P2: P2级别测试-边缘场景")
 
 
 def pytest_collection_modifyitems(config, items):
-    """
-    修改收集到的测试项
-
-    添加默认标记、排序等
-    """
+    """Modify collected test items - add default markers"""
     for item in items:
-        # 为所有测试添加默认标记
-        if not any(item.get_closest_marker(name) for name in ["smoke", "regression", "sanity", "api", "ui"]):
+        if not any(item.get_closest_marker(name) for name in ["smoke", "regression", "api", "ui"]):
             item.add_marker(pytest.mark.regression)
-
-
-# ==================== Allure Hooks ====================
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_collection_finish(session):
-    """
-    测试收集完成后的钩子
-    添加环境信息到 Allure 报告
-    """
-    try:
-        # 创建环境信息文件
-        environment_properties = {
-            "Environment": config.environment,
-            "Base URL": config.base_url,
-            "Browser": config.browser_type,
-            "Headless": str(config.browser_headless),
-            "Python Version": sys.version,
-            "Platform": sys.platform,
-        }
-
-        # 写入 Allure 环境文件
-        allure_dir = Path("reports/allure")
-        allure_dir.mkdir(parents=True, exist_ok=True)
-
-        env_file = allure_dir / "environment.properties"
-        with open(env_file, "w") as f:
-            for key, value in environment_properties.items():
-                f.write(f"{key}={value}\n")
-    except Exception as e:
-        test_logger.warning(f"Failed to write allure environment: {e}")
-
-
-# ==================== 辅助函数 ====================
-
-def pytest_addoption(parser):
-    """添加命令行选项"""
-    parser.addoption(
-        "--slow",
-        action="store_true",
-        default=False,
-        help="包含慢速测试"
-    )
-    parser.addoption(
-        "--flaky",
-        action="store_true",
-        default=False,
-        help="包含不稳定测试"
-    )
-
-
-def pytest_collection_modifyitems(config, items):
-    """根据命令行选项过滤测试"""
-    run_slow = config.getoption("--slow")
-    run_flaky = config.getoption("--flaky")
-
-    for item in items:
-        # 跳过慢速测试（除非指定 --slow）
-        if item.get_closest_marker("slow") and not run_slow:
-            item.add_marker(pytest.mark.skip(reason="Skipping slow test (use --slow to include)"))
-
-        # 跳过不稳定测试（除非指定 --flaky）
-        if item.get_closest_marker("flaky") and not run_flaky:
-            item.add_marker(pytest.mark.skip(reason="Skipping flaky test (use --flaky to include)"))
