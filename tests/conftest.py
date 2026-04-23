@@ -95,12 +95,163 @@ def base_url() -> str:
 
 
 # ==================== Page Object Fixtures ====================
+# 所有页面对象 fixture（除 login_page 外）都会自动执行登录
+# 使用 authenticated_page 作为基础，确保测试运行前用户已登录
 
 @pytest.fixture(scope="function")
 async def online_consultation_page(page: Page, base_url: str):
-    """Online consultation page object"""
+    """Online consultation page object (未自动登录，仅用于测试登录前的状态)"""
     from pages.online_consultation_page import OnlineConsultationPage
     return OnlineConsultationPage(page, base_url)
+
+
+@pytest.fixture(scope="function")
+async def authenticated_page(page: Page, base_url: str):
+    """
+    通用的已认证页面 fixture - 适用于所有需要登录的测试
+
+    自动登录并返回已认证的 page 对象
+    如果存在保存的登录状态则使用，否则执行登录并保存状态
+
+    This fixture ensures:
+    1. User is logged in
+    2. Page is on the home page (#/home)
+    3. Doctor is selected
+
+    Returns:
+        Page: 已登录的 Playwright Page 对象
+    """
+    # Get test credentials
+    username = os.getenv("GST_USERNAME", "17671792742")
+    password = os.getenv("GST_PASSWORD", "123456")
+    doctor_name = os.getenv("GST_DOCTOR_NAME", "罗慧")
+
+    # Storage state file path
+    storage_state_file = project_root / "tests" / "storage_state.json"
+
+    # Navigate to home page
+    await page.goto(f"{base_url}#/home")
+
+    # 等待页面加载
+    await page.wait_for_timeout(2000)
+
+    # 检查是否需要登录（如果不在登录页面，说明已使用保存的状态登录）
+    if "#/login" in page.url:
+        test_logger.info("No saved login state found, performing login...")
+        # 需要登录
+        try:
+            # 等待登录表单出现
+            await page.wait_for_selector("input[placeholder*='手机号']", timeout=10000)
+            test_logger.info("Login page loaded, filling credentials...")
+
+            # 填写手机号和验证码
+            await page.fill("input[placeholder*='手机号']", username)
+            await page.fill("input[placeholder*='验证码']", password)
+            test_logger.info(f"Credentials filled: {username}")
+
+            # 直接点击登录按钮（不点击"获取验证码"）
+            await page.click("button:has-text('登录')")
+            test_logger.info("Login button clicked")
+
+            # 等待登录响应和页面跳转 - 增加等待时间
+            await page.wait_for_timeout(5000)
+
+            # 登录后选择医生
+            test_logger.info("Waiting for doctor selection dialog...")
+
+            # 先等待医生对话框出现（最多等待10秒）
+            try:
+                # 等待对话框出现
+                await page.wait_for_selector("dialog, .dialog, [role='dialog']", timeout=10000)
+                test_logger.info("Doctor selection dialog appeared")
+            except:
+                test_logger.warning("No doctor selection dialog found after 10 seconds")
+
+            # 等待2秒让对话框完全加载
+            await page.wait_for_timeout(2000)
+
+            # 检查是否有对话框或单选按钮
+            dialog_found = False
+            dialogs = page.locator("dialog, .dialog, [role='dialog']")
+            dialog_count = await dialogs.count()
+            radios = page.locator("input[type='radio'], [role='radio']")
+            radio_count = await radios.count()
+
+            test_logger.info(f"Dialog count: {dialog_count}, Radio count: {radio_count}")
+
+            if dialog_count > 0 or radio_count > 0:
+                dialog_found = True
+                test_logger.info("Doctor selection UI found, proceeding with selection")
+
+            if dialog_found:
+                # 选择医生
+                doctor_radio = page.locator(f"radio:has-text('{doctor_name}')")
+                if await doctor_radio.count() > 0:
+                    await doctor_radio.first.click()
+                    test_logger.info(f"Selected doctor: {doctor_name}")
+                else:
+                    await radios.first.click()
+                    test_logger.info("Selected first available doctor")
+
+                # 等待500ms确保选择生效
+                await page.wait_for_timeout(500)
+
+                # 点击确认切换按钮
+                await page.click("button:has-text('确认'), button:has-text('确认切换')")
+                test_logger.info("Confirmed doctor selection")
+
+                # 等待页面跳转
+                await page.wait_for_timeout(3000)
+            else:
+                # 没有找到医生对话框，检查URL
+                current_url = page.url
+                test_logger.info(f"No doctor dialog found. Current URL: {current_url}")
+
+                # 如果还在登录页面，说明登录失败
+                if "#/login" in current_url:
+                    raise Exception("Login failed - still on login page and no doctor dialog found")
+
+            # 保存登录状态到文件
+            test_logger.info("Saving login state to file...")
+            await page.context.storage_state(path=str(storage_state_file))
+            test_logger.info(f"Login state saved to: {storage_state_file}")
+
+        except Exception as e:
+            test_logger.error(f"Login failed: {e}")
+            raise
+    else:
+        test_logger.info("Using saved login state - already authenticated")
+
+    # 验证已在在线问诊页面
+    current_url = page.url
+    if "#/login" in current_url:
+        raise Exception(f"Login verification failed - still on login page: {current_url}")
+
+    test_logger.info(f"GST authenticated: {username} as doctor {doctor_name}")
+    test_logger.info(f"Successfully entered home page: {current_url}")
+
+    return page
+
+
+@pytest.fixture(scope="function")
+async def dashboard_page(authenticated_page: Page, base_url: str):
+    """Dashboard page object with authenticated state"""
+    from pages.dashboard_page import DashboardPage
+    return DashboardPage(authenticated_page, base_url)
+
+
+@pytest.fixture(scope="function")
+async def user_management_page(authenticated_page: Page, base_url: str):
+    """User management page object with authenticated state"""
+    from pages.user_management_page import UserManagementPage
+    return UserManagementPage(authenticated_page, base_url)
+
+
+@pytest.fixture(scope="function")
+async def login_page(page: Page, base_url: str):
+    """Login page object - for testing login functionality (no auto-login)"""
+    from pages.login_page import LoginPage
+    return LoginPage(page, base_url)
 
 
 @pytest.fixture(scope="function")
@@ -153,49 +304,63 @@ async def gst_online_consultation_page(page: Page, base_url: str):
             await page.click("button:has-text('登录')")
             test_logger.info("Login button clicked")
 
-            # 等待页面跳转
-            await page.wait_for_timeout(3000)
+            # 等待登录响应和页面跳转 - 增加等待时间
+            await page.wait_for_timeout(5000)
 
             # 登录后选择医生
             test_logger.info("Waiting for doctor selection dialog...")
-            await page.wait_for_timeout(2000)
-            current_url = page.url
-            test_logger.info(f"Current URL before doctor selection: {current_url}")
 
-            # 如果还在登录页面，说明登录失败
-            if "#/login" in current_url:
-                raise Exception("Login failed - still on login page")
-
-            # 检查是否有对话框
+            # 先等待医生对话框出现（最多等待10秒）
             try:
-                dialog_found = False
-                dialogs = page.locator("dialog, .dialog, [role='dialog']")
-                if await dialogs.count() > 0:
-                    dialog_found = True
-                    test_logger.info(f"Found {await dialogs.count()} dialog(s)")
+                # 等待对话框出现
+                await page.wait_for_selector("dialog, .dialog, [role='dialog']", timeout=10000)
+                test_logger.info("Doctor selection dialog appeared")
+            except:
+                test_logger.warning("No doctor selection dialog found after 10 seconds")
 
-                radios = page.locator("input[type='radio'], [role='radio']")
-                if await radios.count() > 0:
-                    dialog_found = True
-                    test_logger.info(f"Found {await radios.count()} radio button(s)")
+            # 等待2秒让对话框完全加载
+            await page.wait_for_timeout(2000)
 
-                if dialog_found:
-                    test_logger.info("Doctor selection dialog found")
-                    doctor_radio = page.locator(f"radio:has-text('{doctor_name}')")
-                    if await doctor_radio.count() > 0:
-                        await doctor_radio.first.click()
-                        test_logger.info(f"Selected doctor: {doctor_name}")
-                    else:
-                        await radios.first.click()
-                        test_logger.info("Selected first available doctor")
+            # 检查是否有对话框或单选按钮
+            dialog_found = False
+            dialogs = page.locator("dialog, .dialog, [role='dialog']")
+            dialog_count = await dialogs.count()
+            radios = page.locator("input[type='radio'], [role='radio']")
+            radio_count = await radios.count()
 
-                    await page.wait_for_timeout(500)
-                    await page.click("button:has-text('确认'), button:has-text('确认切换')")
-                    test_logger.info("Confirmed doctor selection")
-                    await page.wait_for_timeout(2000)
+            test_logger.info(f"Dialog count: {dialog_count}, Radio count: {radio_count}")
 
-            except Exception as e:
-                test_logger.warning(f"Doctor selection process issue: {e}")
+            if dialog_count > 0 or radio_count > 0:
+                dialog_found = True
+                test_logger.info("Doctor selection UI found, proceeding with selection")
+
+            if dialog_found:
+                # 选择医生
+                doctor_radio = page.locator(f"radio:has-text('{doctor_name}')")
+                if await doctor_radio.count() > 0:
+                    await doctor_radio.first.click()
+                    test_logger.info(f"Selected doctor: {doctor_name}")
+                else:
+                    await radios.first.click()
+                    test_logger.info("Selected first available doctor")
+
+                # 等待500ms确保选择生效
+                await page.wait_for_timeout(500)
+
+                # 点击确认切换按钮
+                await page.click("button:has-text('确认'), button:has-text('确认切换')")
+                test_logger.info("Confirmed doctor selection")
+
+                # 等待页面跳转
+                await page.wait_for_timeout(3000)
+            else:
+                # 没有找到医生对话框，检查URL
+                current_url = page.url
+                test_logger.info(f"No doctor dialog found. Current URL: {current_url}")
+
+                # 如果还在登录页面，说明登录失败
+                if "#/login" in current_url:
+                    raise Exception("Login failed - still on login page and no doctor dialog found")
 
             # 保存登录状态到文件
             test_logger.info("Saving login state to file...")

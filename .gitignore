@@ -43,6 +43,8 @@ htmlcov/
 # Reports
 reports/html/*
 reports/allure/*
+reports/allure-html/*
+reports/allure-report/*
 reports/screenshots/*
 reports/videos/*
 !reports/.gitkeep
@@ -55,6 +57,10 @@ logs/auto/*
 # Environment Variables
 .env
 .env.local
+
+# Allure Configuration (personal)
+allure_env.bat
+.allure_config.bat
 
 # Playwright
 playwright-report/

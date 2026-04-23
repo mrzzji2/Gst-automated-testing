@@ -165,7 +165,31 @@ class OnlineConsultationPage(BasePage):
         Args:
             name: 患者姓名
         """
-        # 使用 Playwright 的 get_by_text 方法
+        # 尝试多种选择器来等待患者列表加载
+        selectors = [
+            "tbody tr",           # 表格行
+            "[class*='patient']",  # 包含 patient 的元素
+            "[role='row']",        # role="row" 的元素
+            ".el-table__row",      # Element UI 表格行
+        ]
+
+        # 等待任一选择器找到至少一个患者
+        for selector in selectors:
+            try:
+                count = await self.page.locator(selector).count()
+                if count > 0:
+                    logger.debug(f"Patient list loaded using selector: {selector}")
+                    break
+            except:
+                continue
+        else:
+            logger.warning("Patient list may not be fully loaded")
+
+        # 等待指定患者文本出现并点击
+        await self.page.wait_for_selector(
+            f"text=\"{name}\"",
+            timeout=10000
+        )
         await self.page.get_by_text(name).click()
         logger.info(f"Selected patient: {name}")
 
@@ -503,13 +527,19 @@ class OnlineConsultationPage(BasePage):
             菜单项名称列表
         """
         try:
-            # 获取所有包含文字的菜单项
-            items = await self.page.locator(".menu-item, .sidebar-menu [class*='menu']").all()
+            # 获取搜索框上方的菜单项（咨询列表、今日扫码、全部患者、电话看诊、视频看诊、门诊预约）
+            # 这些是页面中间的导航按钮
+            items = await self.page.locator(".el-menu-item, [class*='menu-item'], .nav-item").all()
             names = []
             for item in items:
                 text = await item.text_content()
                 if text.strip():
-                    names.append(text.strip())
+                    # 只保留菜单名称，过滤掉数字角标
+                    text = text.strip()
+                    # 移除可能的数字角标（如 "电话看诊49" -> "电话看诊"）
+                    import re
+                    text = re.sub(r'\d+$', '', text)
+                    names.append(text)
             logger.debug(f"Menu items: {names}")
             return names
         except Exception as e:
@@ -605,7 +635,7 @@ class OnlineConsultationPage(BasePage):
     async def dismiss_dialog_by_escape(self):
         """按 ESC 关闭对话框"""
         await self.page.keyboard.press("Escape")
-        await self.page.wait_for_timeout(300)
+        await self.page.wait_for_timeout(1000)  # 增加等待时间到1000ms
         logger.info("Dismissed dialog by Escape")
 
     async def is_dialog_visible(self, selector: str = None) -> bool:
