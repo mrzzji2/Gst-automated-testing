@@ -1,4 +1,4 @@
-base_url: "https://doc-online-test.gstyun.cn/webClinic/index.html"
+base_url: "https://doc-online-test.gstyun.cn/webClinic"
 login_path: "/login"
 headless: false
 
@@ -8,6 +8,7 @@ selectors:
   login_btn: "button:has-text('登录')"
   doctor_radio: "radio"
   confirm_btn: "button:has-text('确认'), button:has-text('确认切换')"
+  online_consultation_menu: ".menu-item:has-text('问诊')"
 
 timeout:
   default: 30000

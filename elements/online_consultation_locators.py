@@ -123,7 +123,16 @@ class OnlineConsultationLocators:
     # ==================== 结束问诊确认弹窗 ====================
     END_CONSULTATION_DIALOG = ".dialog:has-text('结束本次咨询')"
     BUTTON_CONFIRM_END = "button:has-text('确认结束'), button:has-text('确认')"
+    BUTTON_CANCEL_END = "button:has-text('取消'), button:has-text('关闭')"
     BUTTON_REFUND_END = "button:has-text('退号退款')"
+
+    # ==================== 徽章数量 ====================
+    VIDEO_CONSULTATION_BADGE = "text=视频看诊"
+    PHONE_CONSULTATION_BADGE = "text=电话看诊"
+    DRAFT_COUNT = "text=草稿箱 >> .."  # 草稿箱数量
+
+    # ==================== 第一个患者姓名 ====================
+    FIRST_PATIENT_NAME = "[class*='patient']:first-child"
 
     # ==================== 会话状态 ====================
     CONSULTATION_STATUS_ENDED = "text=已结束"

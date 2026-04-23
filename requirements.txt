@@ -1,21 +1,21 @@
 # Core Dependencies
-playwright==1.48.0
-pytest==8.3.4
-pytest-html==4.1.1
-pytest-xdist==3.6.1
-pytest-rerunfailures==14.0
-pytest-base-url==2.1.0
-allure-pytest==2.13.5
+playwright>=1.48.0
+pytest>=8.3.4
+pytest-html>=4.1.1
+allure-pytest>=2.13.5
 
 # Configuration
-pyyaml==6.0.2
-python-dotenv==1.0.1
+pyyaml>=6.0.2
+python-dotenv>=1.0.1
 
 # Utilities
-pymysql==1.1.1
-requests==2.32.3
-openpyxl==3.1.5
-pandas==2.2.3
+requests>=2.32.3
 
 # Reporting
-loguru==0.7.3
+loguru>=0.7.3
+
+# MCP Support
+mcp-playwright>=0.1.1
+
+# Enterprise WeChat
+wecom>=2022.3.24
