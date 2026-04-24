@@ -7,7 +7,7 @@ import allure
 from loguru import logger
 from datetime import datetime
 
-from pages.online_consultation_page_sync import OnlineConsultationPage
+from pages.online_consultation_page import OnlineConsultationPage
 
 
 @allure.feature("医生工作台")

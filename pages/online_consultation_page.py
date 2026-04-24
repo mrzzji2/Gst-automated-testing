@@ -6,7 +6,7 @@ from playwright.sync_api import Page
 from typing import List, Dict
 from loguru import logger
 
-from pages.base_page_sync import BasePage
+from pages.base_page import BasePage
 from elements.online_consultation_locators import OnlineConsultationLocators
 
 

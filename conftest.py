@@ -183,7 +183,7 @@ def gst_online_consultation_page(page, base_url):
     if _STORAGE_STATE is None:
         _STORAGE_STATE = config['reports']['auth_state']
     
-    from pages.online_consultation_page_sync import OnlineConsultationPage
+    from pages.online_consultation_page import OnlineConsultationPage
     
     # 获取测试账号
     username = os.getenv("GST_USERNAME", "18500629847")

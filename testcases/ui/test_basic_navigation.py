@@ -1,5 +1,5 @@
 import pytest
-from pages.online_consultation_page_sync import OnlineConsultationPage
+from pages.online_consultation_page import OnlineConsultationPage
 
 class TestBasicNavigation:
     """基础导航测试"""
