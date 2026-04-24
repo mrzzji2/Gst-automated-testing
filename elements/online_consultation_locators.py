@@ -29,21 +29,18 @@ class OnlineConsultationLocators:
     MENU_ALL_PATIENTS = "text=全部患者"
 
     # 看诊数量徽章
-    BADGE_PHONE_CONSULTATION = "text=电话看诊 >> .."  # 后面跟着数字
-    BADGE_VIDEO_CONSULTATION = "text=视频看诊 >> .."  # 后面跟着数字
+    BADGE_PHONE_CONSULTATION = "text=电话看诊 >> nth=0 >> .."  # 主菜单第一个电话看诊项
+    BADGE_VIDEO_CONSULTATION = "text=视频看诊 >> nth=0 >> .."  # 主菜单第一个视频看诊项
 
     # ==================== 患者搜索 ====================
     PATIENT_SEARCH_INPUT = "textbox:has-text('请输入患者名称搜索'), input[placeholder*='患者' i], input[placeholder*='搜索' i]"
 
     # ==================== 患者列表 ====================
-    PATIENT_LIST = "[class*='patient-list'], .el-table__body, .patient-list"
-    PATIENT_ITEM_BY_NAME = lambda name: f"text={name}"
+    PATIENT_LIST = "#consultList"
+    PATIENT_LIST_ITEM = "#consultList li"
     PATIENT_AVATAR = ".patient-avatar, img[src*='avatar']"
-    PATIENT_NAME = ".patient-name, [class*='name']"
+    PATIENT_NAME = ".name"
     PATIENT_TIME = ".patient-time, [class*='time']"
-
-    # 患者列表项 - 通用选择器
-    PATIENT_LIST_ITEM = "[class*='patient-list-item'], .patient-item, .list-item"
 
     # 患者状态标签
     STATUS_ENDED = "text=已结束"
@@ -78,7 +75,7 @@ class OnlineConsultationLocators:
 
     # ==================== 患者详情区 ====================
     PATIENT_INFO_PANEL = "text=电话:"
-    PATIENT_DETAIL_NAME = "text=test02, [class*='patient-name']"
+    PATIENT_DETAIL_NAME = ".name"
     PATIENT_GENDER = "text=男, text=女"
     PATIENT_AGE = "text=22岁, .patient-age"
     PATIENT_HEIGHT = ".patient-height"
@@ -130,6 +127,9 @@ class OnlineConsultationLocators:
     VIDEO_CONSULTATION_BADGE = "text=视频看诊"
     PHONE_CONSULTATION_BADGE = "text=电话看诊"
     DRAFT_COUNT = "text=草稿箱 >> .."  # 草稿箱数量
+    # 看诊数量数字
+    VIDEO_CONSULTATION_COUNT = "text=视频看诊 >> .. >> :scope:text-is(/\\d+/)"
+    PHONE_CONSULTATION_COUNT = "text=电话看诊 >> .. >> :scope:text-is(/\\d+/)"
 
     # ==================== 第一个患者姓名 ====================
     FIRST_PATIENT_NAME = "[class*='patient']:first-child"

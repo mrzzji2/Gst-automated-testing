@@ -23,22 +23,73 @@ class OnlineConsultationPage(BasePage):
     # ==================== 导航操作 ====================
 
     def goto_online_consultation(self):
-        """导航到在线问诊页面 - 直接访问在线问诊URL"""
+        """导航到在线问诊页面"""
         # 先访问基础URL进行登录
         base_url = f"{self.base_url}/index.html"
         self.page.goto(base_url)
         logger.info(f"Navigated to base URL for login: {base_url}")
 
-        # 等待登录完成
-        self.page.wait_for_timeout(5000)
+        # 智能等待：等待跳转到 home 页面或医生选择对话框
+        try:
+            self.page.wait_for_url("**/home", timeout=10000)
+            logger.info("Successfully navigated to home page")
+        except:
+            # 可能还在登录页或医生选择页面
+            current_url = self.page.url
+            logger.info(f"Current URL: {current_url}")
 
-        # 直接导航到在线问诊页面
-        consultation_url = f"{self.base_url}/index.html#/online-consultation"
-        self.page.goto(consultation_url)
-        logger.info(f"Navigated to online consultation page: {consultation_url}")
+            if "#/home" not in current_url:
+                logger.warning(f"Not on home page, current URL: {current_url}")
+                # 尝试导航到 home
+                home_url = f"{self.base_url}/index.html#/home"
+                self.page.goto(home_url)
+                try:
+                    self.page.wait_for_url("**/home", timeout=8000)
+                except:
+                    pass
 
-        # 等待页面加载
-        self.page.wait_for_timeout(3000)
+        # 点击"医生工作台"菜单
+        try:
+            # 先点击"医生工作台"主菜单
+            logger.info("Clicking doctor workbench menu first")
+            self.page.get_by_text("医生工作台").first.click()
+
+            # 智能等待：等待在线问诊菜单出现
+            self.page.wait_for_selector("li:has-text('在线问诊')", timeout=3000)
+
+            # 再点击"在线问诊"子菜单
+            logger.info("Clicking online consultation submenu")
+            menu_selectors = [
+                "ul.action-tabs li:has-text('在线问诊')",
+                "li:has-text('在线问诊')",
+                "a:has-text('在线问诊')",
+            ]
+
+            for selector in menu_selectors:
+                try:
+                    menu_item = self.page.locator(selector)
+                    if menu_item.count() > 0:
+                        menu_item.first.click()
+                        logger.info(f"Clicked online consultation menu using: {selector}")
+                        break
+                except:
+                    continue
+
+            # 智能等待：等待页面加载和患者列表出现
+            try:
+                self.page.wait_for_selector("#consultList", timeout=8000)
+                logger.info("Patient list loaded successfully")
+            except:
+                logger.warning("Patient list not found after clicking menu")
+
+            # 验证最终 URL
+            final_url = self.page.url
+            logger.info(f"Final URL: {final_url}")
+
+        except Exception as e:
+            logger.error(f"Failed to navigate to online consultation menu: {e}")
+
+        logger.info("Navigation to online consultation completed")
 
     def click_doctor_workbench(self):
         """点击医生工作台菜单"""
@@ -68,13 +119,20 @@ class OnlineConsultationPage(BasePage):
         # 按 Enter 触发搜索
         self.page.keyboard.press("Enter")
         logger.info(f"Searched for patient: {keyword}")
-        self.page.wait_for_timeout(500)
+        # 搜索结果即时更新，无需等待
 
     def clear_patient_search(self):
         """清空患者搜索"""
         self.clear_text(self.locators.PATIENT_SEARCH_INPUT)
         self.page.keyboard.press("Enter")
         logger.info("Cleared patient search")
+
+    def is_search_box_enabled(self) -> bool:
+        """检查搜索框是否可用"""
+        try:
+            return self.page.locator(self.locators.PATIENT_SEARCH_INPUT).is_enabled()
+        except:
+            return False
 
     # ==================== 患者列表操作 ====================
 
@@ -85,25 +143,16 @@ class OnlineConsultationPage(BasePage):
         Returns:
             患者数量
         """
-        # 尝试多种选择器来查找患者
-        selectors = [
-            "tbody tr",           # 表格行
-            "[class*='patient']",  # 包含 patient 的元素
-            "[role='row']",        # role="row" 的元素
-            ".el-table__row",      # Element UI 表格行
-        ]
+        # 使用正确的选择器
+        selector = "#consultList li"
 
-        for selector in selectors:
-            try:
-                count = self.page.locator(selector).count()
-                if count > 0:
-                    logger.debug(f"Found {count} patients using selector: {selector}")
-                    return count
-            except:
-                continue
-
-        logger.warning("No patients found with any selector")
-        return 0
+        try:
+            count = self.page.locator(selector).count()
+            logger.info(f"Found {count} patients using selector: {selector}")
+            return count
+        except Exception as e:
+            logger.warning(f"Error getting patient list: {e}")
+            return 0
 
     def select_patient_by_index(self, index: int):
         """
@@ -125,7 +174,11 @@ class OnlineConsultationPage(BasePage):
                 if self.page.locator(selector).count() > 0:
                     self.page.click(selector)
                     logger.info(f"Selected patient at index {index} using: {selector}")
-                    self.page.wait_for_timeout(1000)
+                    # 智能等待：等待患者详情面板出现
+                    try:
+                        self.page.wait_for_selector("[class*='patient-info'], [class*='patient-detail']", timeout=2000)
+                    except:
+                        pass  # 继续执行
                     return
             except:
                 continue
@@ -139,17 +192,30 @@ class OnlineConsultationPage(BasePage):
         Args:
             name: 患者姓名
         """
-        # 等待指定患者文本出现并点击
-        try:
-            self.page.wait_for_selector(
-                f"text=\"{name}\"",
-                timeout=10000
-            )
-            self.page.get_by_text(name).click()
-            logger.info(f"Selected patient: {name}")
-        except Exception as e:
-            logger.warning(f"Could not select patient by name '{name}': {e}")
-            raise
+        # 使用正确的选择器定位患者列表项
+        selector = "#consultList li"
+
+        # 等待患者列表加载
+        self.page.wait_for_selector(selector, timeout=10000)
+
+        # 在患者列表中查找包含指定姓名的项
+        patient_items = self.page.locator(selector)
+        count = patient_items.count()
+
+        logger.debug(f"Found {count} patient items")
+
+        for i in range(count):
+            try:
+                item = patient_items.nth(i)
+                # 检查是否包含患者姓名
+                if item.locator(f"text={name}").count() > 0:
+                    item.click()
+                    logger.info(f"Selected patient: {name}")
+                    return
+            except:
+                continue
+
+        raise Exception(f"Patient '{name}' not found in list")
 
     def get_first_patient_name(self) -> str:
         """
@@ -159,18 +225,29 @@ class OnlineConsultationPage(BasePage):
             患者姓名
         """
         try:
-            # 获取患者列表中的第一个患者姓名
-            patient_list = self.page.locator("[class*='patient']")
-            if patient_list.count() > 0:
-                first_patient = patient_list.first
-                text_content = first_patient.text_content()
-                if text_content:
-                    lines = text_content.strip().split('\n')
-                    for line in lines:
-                        line = line.strip()
-                        if line and len(line) > 0:
-                            if not any(char in line for char in ['年', '月', '日', '已结束', '填写']):
-                                return line
+            # 获取患者列表中的第一个患者（跳过第一个，可能是小固助理）
+            selector = "#consultList li"
+            patient_items = self.page.locator(selector)
+            count = patient_items.count()
+
+            if count <= 1:
+                return ""
+
+            # 从第二个开始查找患者姓名（跳过小固助理）
+            for i in range(1, min(count, 5)):
+                try:
+                    item = patient_items.nth(i)
+                    # 查找 .name 元素
+                    name_span = item.locator('.name')
+                    if name_span.count() > 0:
+                        name_text = name_span.text_content()
+                        if name_text and name_text.strip():
+                            cleaned_name = name_text.strip()
+                            # 排除时间和状态等非姓名内容
+                            if not any(char in cleaned_name for char in ['年', '月', '日', '已结束', '填写']):
+                                return cleaned_name
+                except:
+                    continue
         except Exception as e:
             logger.debug(f"Could not get first patient name: {e}")
         return ""
@@ -240,17 +317,17 @@ class OnlineConsultationPage(BasePage):
 
     def click_video_consultation(self):
         """点击视频看诊"""
-        self.click(self.locators.BUTTON_VIDEO_CONSULTATION)
+        self.page.get_by_text("视频看诊").last.click()
         logger.info("Clicked video consultation button")
 
     def click_phone_consultation(self):
         """点击电话看诊"""
-        self.click(self.locators.BUTTON_PHONE_CONSULTATION)
+        self.page.get_by_text("电话看诊").click()
         logger.info("Clicked phone consultation button")
 
     def click_end_consultation(self):
         """点击结束问诊"""
-        self.click(self.locators.BUTTON_END_CONSULTATION)
+        self.page.get_by_text("结束问诊").first.click()
         logger.info("Clicked end consultation button")
 
     # ==================== 结束问诊确认 ====================
@@ -342,9 +419,11 @@ class OnlineConsultationPage(BasePage):
             数量
         """
         try:
-            badge_text = self.get_text(self.locators.VIDEO_CONSULTATION_BADGE)
+            # 思路A：获取包含"视频看诊"的li父元素，提取完整文本中的数字
+            menu_item = self.page.locator('li:has-text("视频看诊")').first
+            full_text = menu_item.text_content()
             import re
-            numbers = re.findall(r'\d+', badge_text)
+            numbers = re.findall(r'\d+', full_text)
             if numbers:
                 return int(numbers[0])
         except:
@@ -359,9 +438,11 @@ class OnlineConsultationPage(BasePage):
             数量
         """
         try:
-            badge_text = self.get_text(self.locators.PHONE_CONSULTATION_BADGE)
+            # 思路A：获取包含"电话看诊"的li父元素，提取完整文本中的数字
+            menu_item = self.page.locator('li:has-text("电话看诊")').first
+            full_text = menu_item.text_content()
             import re
-            numbers = re.findall(r'\d+', badge_text)
+            numbers = re.findall(r'\d+', full_text)
             if numbers:
                 return int(numbers[0])
         except:
@@ -483,12 +564,15 @@ class OnlineConsultationPage(BasePage):
             option: 选项，"video"视频看诊 或 "audio"语音问诊
         """
         self.click(self.locators.BUTTON_VIDEO_CONSULTATION)
-        self.page.wait_for_timeout(300)
+        # 智能等待：等待二级菜单出现
+        try:
+            self.page.wait_for_selector(self.locators.SUBMENU_VIDEO_CONSULTATION, timeout=1000)
+        except:
+            pass  # 继续执行
         if option == "video":
             self.click(self.locators.SUBMENU_VIDEO_CONSULTATION)
         else:
             self.click(self.locators.SUBMENU_AUDIO_CONSULTATION)
-        self.page.wait_for_timeout(300)
         logger.info(f"Clicked video consultation submenu: {option}")
 
     def click_phone_consultation_submenu(self, option: str = "phone"):
@@ -499,12 +583,15 @@ class OnlineConsultationPage(BasePage):
             option: 选项，"phone"电话问诊 或 "audio"语音问诊
         """
         self.click(self.locators.BUTTON_PHONE_CONSULTATION)
-        self.page.wait_for_timeout(300)
+        # 智能等待：等待二级菜单出现
+        try:
+            self.page.wait_for_selector(self.locators.SUBMENU_PHONE_CONSULTATION, timeout=1000)
+        except:
+            pass  # 继续执行
         if option == "phone":
             self.click(self.locators.SUBMENU_PHONE_CONSULTATION)
         else:
             self.click(self.locators.SUBMENU_AUDIO_CONSULTATION_PHONE)
-        self.page.wait_for_timeout(300)
         logger.info(f"Clicked phone consultation submenu: {option}")
 
     def get_draft_box_heading(self) -> str:
@@ -534,13 +621,13 @@ class OnlineConsultationPage(BasePage):
     def click_close_dialog_button(self):
         """点击对话框关闭按钮"""
         self.click(self.locators.BUTTON_PRESCRIPTION_CLOSE)
-        self.page.wait_for_timeout(300)
         logger.info("Clicked dialog close button")
 
     def dismiss_dialog_by_escape(self):
         """按 ESC 关闭对话框"""
         self.page.keyboard.press("Escape")
-        self.page.wait_for_timeout(1000)
+        # 智能等待：等待对话框消失（短等待）
+        self.page.wait_for_timeout(200)
         logger.info("Dismissed dialog by Escape")
 
     def is_dialog_visible(self, selector: str = None) -> bool:

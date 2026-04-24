@@ -4,12 +4,14 @@ GST Online Consultation Testing - Simplified Configuration
 """
 import os
 import shutil
+import inspect
 from pathlib import Path
 from datetime import datetime, timedelta
 
 import pytest
 import allure
 from dotenv import load_dotenv
+from loguru import logger
 
 from utils.config_loader import load_config
 from utils.wecom_notify import send_wecom_notification
@@ -22,6 +24,7 @@ load_dotenv()
 
 # 报告相关全局变量
 _TEST_RESULTS = []
+_SCREENSHOTS = []
 
 # 存储状态文件路径
 _STORAGE_STATE = None
@@ -159,19 +162,11 @@ def page(context):
 
 @pytest.fixture(scope="session")
 def base_url():
-    """获取基础URL - 优先使用配置文件，环境变量作为备用"""
+    """获取基础URL"""
     global config
     if config is None:
         config = load_config()
-    # 优先使用配置文件中的 base_url
-    base_url_from_config = config.get('base_url')
-    print(f"DEBUG: base_url_from_config = {base_url_from_config}")
-    if base_url_from_config:
-        return base_url_from_config
-    # 备用：从环境变量获取
-    env_base_url = os.getenv("GST_BASE_URL", "https://doc-online-test.gstyun.cn/webClinic")
-    print(f"DEBUG: env_base_url = {env_base_url}")
-    return env_base_url
+    return config['base_url']
 
 
 # ---------------------------------------------------------------------------
@@ -191,44 +186,87 @@ def gst_online_consultation_page(page, base_url):
     from pages.online_consultation_page_sync import OnlineConsultationPage
     
     # 获取测试账号
-    username = os.getenv("GST_USERNAME", "17671792742")
+    username = os.getenv("GST_USERNAME", "18500629847")
     password = os.getenv("GST_PASSWORD", "123456")
-    doctor_name = os.getenv("GST_DOCTOR_NAME", "罗慧")
-    print(f"DEBUG: GST_USERNAME={username}, GST_PASSWORD={password}")
     
     # 创建页面对象
     online_page = OnlineConsultationPage(page, base_url)
-    
+
     # 导航到主页
     online_page.goto_online_consultation()
-    page.wait_for_timeout(2000)
-    
-    # 检查是否需要登录 - 调试URL
-    print(f"DEBUG: Current page URL = {page.url}")
+    # 智能等待：等待页面稳定（不再有登录URL）
+    try:
+        page.wait_for_url("**/home", timeout=5000)
+    except:
+        pass  # 可能已经在登录页或其他页面
+
+    # 检查是否需要登录
     if "#/login" in page.url:
+        logger.info("Login page detected, proceeding with login")
         try:
+            # 智能等待：等待登录表单出现
+            page.wait_for_selector(config['selectors']['username'], timeout=10000)
+
+            # 调试：检查当前页面状态
+            logger.info(f"Current URL before login: {page.url}")
+
+            # 调试：检查登录表单是否存在
+            username_field = page.locator(config['selectors']['username']).first
+            password_field = page.locator(config['selectors']['password']).first
+            login_button = page.locator(config['selectors']['login_btn']).first
+
+            logger.info(f"Username field count: {username_field.count()}")
+            logger.info(f"Password field count: {password_field.count()}")
+            logger.info(f"Login button count: {login_button.count()}")
+
             # 执行登录
-            page.fill(config['selectors']['username'], username)
-            page.fill(config['selectors']['password'], password)
-            page.click(config['selectors']['login_btn'])
-            page.wait_for_timeout(3000)
-            
-            # 选择医生
+            username_field.fill(username)
+            logger.info(f"Filled username: {username}")
+
+            password_field.fill(password)
+            logger.info(f"Filled password: ***")
+
+            login_button.click()
+            logger.info("Clicked login button")
+
+            # 智能等待：等待登录后URL变化或医生选择对话框出现
+            login_success = False
             try:
-                page.wait_for_timeout(2000)
-                radios = page.locator(config['selectors']['doctor_radio'])
-                if radios.count() > 0:
-                    radios.first.click()
-                
-                page.click(config['selectors']['confirm_btn'])
-                page.wait_for_timeout(2000)
-            except Exception as e:
-                pass  # 可能不需要选择医生
-            
-            # 确保目录存在
-            Path(_STORAGE_STATE).parent.mkdir(parents=True, exist_ok=True)
-            # 保存登录状态
-            page.context.storage_state(path=_STORAGE_STATE)
+                page.wait_for_selector('[role="dialog"] >> text="切换服务医生"', timeout=8000)
+                logger.info("Doctor selection dialog appeared")
+
+                # 选择医生
+                try:
+                    # 智能等待：等待单选按钮出现
+                    first_doctor = page.get_by_role("radio").first
+                    first_doctor.wait_for(state="visible", timeout=3000)
+                    if first_doctor.count() > 0:
+                        first_doctor.click()
+                        logger.info("Selected first doctor from the list")
+
+                    page.click(config['selectors']['confirm_btn'])
+                    # 智能等待：等待跳转到主页
+                    page.wait_for_url("**/home", timeout=10000)
+                    login_success = True
+                except Exception as e:
+                    logger.warning(f"Doctor selection warning: {e}")
+                    # 即使医生选择失败，也尝试保存状态
+                    login_success = True
+            except:
+                # 没有医生选择对话框，可能已经登录了
+                try:
+                    page.wait_for_url("**/home", timeout=5000)
+                    login_success = True
+                except:
+                    pass
+
+            # 登录成功后保存状态
+            if login_success:
+                # 确保目录存在
+                Path(_STORAGE_STATE).parent.mkdir(parents=True, exist_ok=True)
+                # 保存登录状态
+                page.context.storage_state(path=_STORAGE_STATE)
+                logger.info(f"Login state saved to: {_STORAGE_STATE}")
             
         except Exception as e:
             raise Exception(f"登录失败: {e}")
@@ -257,15 +295,72 @@ def pytest_runtest_makereport(item, call):
     """收集测试结果"""
     outcome = yield
     report = outcome.get_result()
-    
+
     if report.when == "call":
+        # 获取 Allure title（中文名）
+        title = None
+
+        # 方法1：从函数的 allure.title 装饰器获取
+        if hasattr(item, 'obj') and item.obj:
+            try:
+                # 获取源代码行
+                source = inspect.getsource(item.obj)
+
+                # 查找 @allure.title("xxx") 或 @allure.title('xxx')
+                import re
+                title_match = re.search(r'@allure\.title\([\'"]([^\'"]+)[\'"]\)', source)
+                if title_match:
+                    title = title_match.group(1)
+                else:
+                    # 尝试获取整个文件的源代码
+                    file_path = str(item.fspath)
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        file_source = f.read()
+                    # 使用函数名定位
+                    func_name = item.name
+                    # 在函数定义前查找 allure.title
+                    pattern = rf'@allure\.title\([\'"]([^\'"]+)[\'"]\)[^@]*def {func_name}'
+                    title_match = re.search(pattern, file_source, re.DOTALL)
+                    if title_match:
+                        title = title_match.group(1)
+            except Exception as e:
+                logger.debug(f"Failed to get allure title: {e}")
+
+        # 方法2：从函数的 docstring 获取（如果没有找到 title）
+        if not title and hasattr(item, 'obj') and item.obj:
+            doc = item.obj.__doc__
+            if doc:
+                title = doc.strip().split('\n')[0].strip()
+
+        # 方法3：使用函数名作为后备
+        if not title:
+            title = item.nodeid.split('::')[-1]
+
+        # 获取优先级
+        priority = None
+        for p in ["P0", "P1", "P2"]:
+            if item.get_closest_marker(p):
+                priority = p
+                break
+
+        # 获取额外信息（如看诊数量等）
+        extra_info = ""
+        for key, value in item.user_properties:
+            if key == 'extra_info':
+                extra_info = value
+                break
+
         # 记录测试结果
         test_result = {
             'name': item.nodeid,
+            'title': title,
             'status': report.outcome,
-            'error': str(call.excinfo.value) if call.excinfo else ''
+            'error': str(call.excinfo.value) if call.excinfo else '',
+            'duration': report.duration if hasattr(report, 'duration') else 0,
+            'priority': priority or 'P2',
+            'extra_info': extra_info
         }
-        
+
         _TEST_RESULTS.append(test_result)
 
 
@@ -273,27 +368,61 @@ def pytest_runtest_makereport(item, call):
 # 测试会话结束处理
 # ---------------------------------------------------------------------------
 def pytest_sessionfinish(session, exitstatus):
-    """测试会话结束时生成简单报告并处理截图"""
+    """测试会话结束时生成自动化报告样式并发送企业微信通知"""
     try:
-        if _TEST_RESULTS:
-            # 只生成最简单的统计信息
-            total = len(_TEST_RESULTS)
-            passed = sum(1 for r in _TEST_RESULTS if r['status'] == 'passed')
-            failed = sum(1 for r in _TEST_RESULTS if r['status'] == 'failed')
-            skipped = sum(1 for r in _TEST_RESULTS if r['status'] == 'skipped')
+        from _pytest.terminal import TerminalReporter
+        reporter = session.config.pluginmanager.get_plugin('terminalreporter')
+        if reporter:
+            stats = reporter.stats
             
-            print(f"\n[REPORT] 测试结果统计:")
-            print(f"总计: {total} | 通过: {passed} | 失败: {failed} | 跳过: {skipped}")
+            # 收集本次所有报告的 page_name 标记，用于组装企业微信标题
+            all_reports = []
+            for key in ("passed", "failed", "error", "skipped"):
+                all_reports.extend(stats.get(key, []))
+            
+            # 提取 page 标记
+            page_names = {
+                dict(r.user_properties).get("page_name", "")
+                for r in all_reports
+            }
+            page_names.discard("")
+            
+            # 计算统计信息
+            total = len(all_reports)
+            passed = len(stats.get("passed", []))
+            failed = len(stats.get("failed", [])) + len(stats.get("error", []))
+            skipped = len(stats.get("skipped", []))
+            
+            # 生成智能标题
+            if len(page_names) == 1:
+                title = f"🤖 {page_names.pop()} 自动化回归测试报告"
+            else:
+                title = "🤖 自动化回归测试报告"
+            
+            # 打印报告统计
+            print(f"\n{title}")
+            print(f"✅ 通过: {passed}/{total}")
+            print(f"❌ 失败: {failed}/{total}")
+            print(f"⏭️ 跳过: {skipped}/{total}")
             
             # 确保截图目录按日期分类
             if failed > 0:
                 _ensure_screenshot_directory()
             
-            # 发送企业微信通知
+            # 生成并打开 HTML 报告
+            try:
+                from utils.html_report import generate_html_report, open_report_in_browser
+                html_report_path = generate_html_report(_TEST_RESULTS, _SCREENSHOTS)
+                if html_report_path:
+                    open_report_in_browser(html_report_path)
+            except Exception as e:
+                print(f"\n[WARNING] HTML报告生成失败: {e}")
+            
+            # 发送企业微信通知（保留 gst 特色）
             send_wecom_notification(_TEST_RESULTS)
             
     except Exception as e:
-        print(f"\n[WARNING] 统计生成失败: {e}")
+        print(f"\n[WARNING] 报告生成失败: {e}")
 
 
 # ---------------------------------------------------------------------------

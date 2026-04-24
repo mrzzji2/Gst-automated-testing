@@ -1,6 +1,7 @@
 base_url: "https://doc-online-test.gstyun.cn/webClinic"
 login_path: "/login"
-headless: false
+#浏览器有头（false）和无头模（true）式切换
+headless: true
 
 selectors:
   username: "input[placeholder*='手机号']"
@@ -11,8 +12,8 @@ selectors:
   online_consultation_menu: ".menu-item:has-text('问诊')"
 
 timeout:
-  default: 30000
-  navigation: 30000
+  default: 15000
+  navigation: 15000
 
 reports:
   html_dir: "reports/html"

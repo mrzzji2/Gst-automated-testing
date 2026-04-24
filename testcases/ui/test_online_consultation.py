@@ -247,18 +247,32 @@ class TestConsultationList:
     @pytest.mark.regression
     @allure.title("验证电话看诊和视频看诊的数字角标")
     @allure.description("验证电话看诊和视频看诊菜单项显示数字角标")
-    def test_verify_consultation_badges(self, gst_online_consultation_page: OnlineConsultationPage):
+    def test_verify_consultation_badges(self, gst_online_consultation_page: OnlineConsultationPage, request):
         """
         测试用例：验证电话看诊和视频看诊的数字角标 (P1)
 
         步骤：
         1. 进入在线问诊页面
         2. 查找电话看诊和视频看诊的数字角标
+        3. 获取并记录具体数量
 
         期望结果：
         - 显示具体数字（可能为 0）
         - 若无数据可能不显示
         """
+        # 获取电话看诊数量
+        phone_count = gst_online_consultation_page.get_phone_consultation_count()
+        logger.info(f"电话看诊数量: {phone_count}")
+        allure.attach(f"{phone_count}", name="电话看诊数量", attachment_type=allure.attachment_type.TEXT)
+
+        # 获取视频看诊数量
+        video_count = gst_online_consultation_page.get_video_consultation_count()
+        logger.info(f"视频看诊数量: {video_count}")
+        allure.attach(f"{video_count}", name="视频看诊数量", attachment_type=allure.attachment_type.TEXT)
+
+        # 将数量信息存储到测试项的属性中，供 HTML 报告使用
+        request.node.user_properties.append(('extra_info', f'电话看诊: {phone_count}, 视频看诊: {video_count}'))
+
         # 验证电话看诊徽章存在
         phone_badge_visible = gst_online_consultation_page.is_visible(
             gst_online_consultation_page.locators.BADGE_PHONE_CONSULTATION
@@ -272,6 +286,7 @@ class TestConsultationList:
         logger.info(f"Video consultation badge visible: {video_badge_visible}")
 
         # P1 通过：只要找到徽章元素即可，数量验证可能因实时变化而不稳定
+        logger.info(f"Test passed: Phone={phone_count}, Video={video_count}")
         logger.info("Test passed: Consultation badges verified")
 
     @pytest.mark.P1
