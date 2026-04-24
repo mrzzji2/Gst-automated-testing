@@ -194,11 +194,19 @@ def gst_online_consultation_page(page, base_url):
 
     # 导航到主页
     online_page.goto_online_consultation()
-    # 智能等待：等待页面稳定（不再有登录URL）
-    try:
-        page.wait_for_url("**/home", timeout=5000)
-    except:
-        pass  # 可能已经在登录页或其他页面
+    logger.info("Navigation completed")
+
+    # 会话有效性检查：检查患者列表是否为空
+    patient_count = online_page.get_patient_list_count()
+    logger.info(f"Patient count after navigation: {patient_count}")
+
+    # 如果患者列表为空，需要执行登录流程
+    if patient_count == 0:
+        logger.info("Patient list is empty, proceeding with login")
+    else:
+        logger.info(f"Session valid, found {patient_count} patients")
+        # 已登录，直接返回
+        return online_page
 
     # 检查是否需要登录
     if "#/login" in page.url:
@@ -232,7 +240,7 @@ def gst_online_consultation_page(page, base_url):
             # 智能等待：等待登录后URL变化或医生选择对话框出现
             login_success = False
             try:
-                page.wait_for_selector('[role="dialog"] >> text="切换服务医生"', timeout=8000)
+                page.wait_for_selector('[role="dialog"]', timeout=8000)
                 logger.info("Doctor selection dialog appeared")
 
                 # 选择医生
@@ -245,8 +253,11 @@ def gst_online_consultation_page(page, base_url):
                         logger.info("Selected first doctor from the list")
 
                     page.click(config['selectors']['confirm_btn'])
-                    # 智能等待：等待跳转到主页
-                    page.wait_for_url("**/home", timeout=10000)
+                    # 智能等待：等待跳转到主页（可能是 home 或 aiHome）
+                    page.wait_for_url("**/aiHome", timeout=10000)
+                    logger.info("Navigated to AI home page")
+                    # 导航到在线问诊页面
+                    online_page.goto_online_consultation()
                     login_success = True
                 except Exception as e:
                     logger.warning(f"Doctor selection warning: {e}")

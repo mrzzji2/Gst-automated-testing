@@ -24,70 +24,42 @@ class OnlineConsultationPage(BasePage):
 
     def goto_online_consultation(self):
         """导航到在线问诊页面"""
-        # 先访问基础URL进行登录
-        base_url = f"{self.base_url}/index.html"
-        self.page.goto(base_url)
-        logger.info(f"Navigated to base URL for login: {base_url}")
+        # 直接导航到 home 页面（在线问诊页面）
+        home_url = f"{self.base_url}/index.html#/home"
+        self.page.goto(home_url)
+        logger.info(f"Navigated to home page: {home_url}")
 
-        # 智能等待：等待跳转到 home 页面或医生选择对话框
+        # 等待页面加载
+        self.page.wait_for_timeout(2000)
+
+        # 等待患者列表出现（最多等待10秒）
         try:
-            self.page.wait_for_url("**/home", timeout=10000)
-            logger.info("Successfully navigated to home page")
+            self.page.wait_for_selector(self.locators.PATIENT_LIST_ITEM, timeout=10000)
+            logger.info("Patient list selector found")
         except:
-            # 可能还在登录页或医生选择页面
-            current_url = self.page.url
-            logger.info(f"Current URL: {current_url}")
+            logger.info("Patient list selector not found after timeout")
 
-            if "#/home" not in current_url:
-                logger.warning(f"Not on home page, current URL: {current_url}")
-                # 尝试导航到 home
-                home_url = f"{self.base_url}/index.html#/home"
-                self.page.goto(home_url)
-                try:
-                    self.page.wait_for_url("**/home", timeout=8000)
-                except:
-                    pass
+        # 获取患者列表数量
+        patient_count = self.get_patient_list_count()
+        logger.info(f"Patient count after navigation: {patient_count}")
 
-        # 点击"医生工作台"菜单
+        # 会话有效性检查：获取患者列表数量
         try:
-            # 先点击"医生工作台"主菜单
-            logger.info("Clicking doctor workbench menu first")
-            self.page.get_by_text("医生工作台").first.click()
+            # 如果患者列表为空，可能需要检查是否需要登录
+            if patient_count == 0:
+                logger.warning(f"Patient list is empty (count={patient_count}), checking if login needed")
 
-            # 智能等待：等待在线问诊菜单出现
-            self.page.wait_for_selector("li:has-text('在线问诊')", timeout=3000)
+                # 检查当前 URL，如果不在登录页，可能需要导航
+                current_url = self.page.url
+                logger.info(f"Current URL when patient list is empty: {current_url}")
 
-            # 再点击"在线问诊"子菜单
-            logger.info("Clicking online consultation submenu")
-            menu_selectors = [
-                "ul.action-tabs li:has-text('在线问诊')",
-                "li:has-text('在线问诊')",
-                "a:has-text('在线问诊')",
-            ]
-
-            for selector in menu_selectors:
-                try:
-                    menu_item = self.page.locator(selector)
-                    if menu_item.count() > 0:
-                        menu_item.first.click()
-                        logger.info(f"Clicked online consultation menu using: {selector}")
-                        break
-                except:
-                    continue
-
-            # 智能等待：等待页面加载和患者列表出现
-            try:
-                self.page.wait_for_selector("#consultList", timeout=8000)
-                logger.info("Patient list loaded successfully")
-            except:
-                logger.warning("Patient list not found after clicking menu")
-
-            # 验证最终 URL
-            final_url = self.page.url
-            logger.info(f"Final URL: {final_url}")
-
+                # 如果在登录页，触发登录流程
+                if "#/login" in current_url:
+                    logger.info("Detected login page or redirected, triggering login")
+                    # 触发重新登录（会由 fixture 的登录逻辑处理）
+                    return  # 退出让 fixture 的登录逻辑处理
         except Exception as e:
-            logger.error(f"Failed to navigate to online consultation menu: {e}")
+            logger.warning(f"Error checking session validity: {e}")
 
         logger.info("Navigation to online consultation completed")
 

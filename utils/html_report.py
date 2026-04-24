@@ -26,6 +26,17 @@ def generate_html_report(test_results, screenshots):
     # 计算总执行时间
     total_duration = sum(r.get('duration', 0) for r in test_results)
 
+    # 生成通过率显示
+    if failed > 0:
+        if skipped > 0:
+            rate_display = f'📈 通过率: <strong>{passed/total*100:.1f}%</strong> ({failed}/{total} 失败，{skipped}/{total} 跳过)'
+        else:
+            rate_display = f'📈 通过率: <strong>{passed/total*100:.1f}%</strong> ({failed}/{total} 失败)'
+    elif skipped > 0:
+        rate_display = f'📈 通过率: <strong>{passed/total*100:.1f}%</strong> ({skipped}/{total} 跳过)'
+    else:
+        rate_display = f'✅ 通过率: <strong>{passed/total*100:.1f}%</strong>'
+
     def format_duration(seconds):
         """格式化执行时间"""
         if seconds < 1:
@@ -299,7 +310,7 @@ def generate_html_report(test_results, screenshots):
 
         <div class="execution-time">
             <span>⏱️ 总执行时间: <strong>{format_duration(total_duration)}</strong></span>
-            <span>📈 通过率: <strong>{passed/total*100:.1f}%</strong> 如果有失败用例</span>
+            <span>{rate_display}</span>
         </div>
 
         <!-- P0 核心流程 -->
