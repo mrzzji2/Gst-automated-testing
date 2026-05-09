@@ -315,7 +315,7 @@ class TestConsultationList:
 
         # 搜索患者
         gst_online_consultation_page.search_patient(first_patient_name)
-        gst_online_consultation_page.page.wait_for_timeout(1000)
+        gst_online_consultation_page.wait(1000)
 
         # 验证搜索结果
         # 这里验证搜索框包含输入的关键词
@@ -346,10 +346,10 @@ class TestConsultationList:
         gst_online_consultation_page.select_patient_by_name("test02")
 
         # 点击在线开方
-        gst_online_consultation_page.page.get_by_text("在线开方").click()
+        gst_online_consultation_page.click_prescribe()
 
-        # 等待弹窗出现（增加等待时间）
-        gst_online_consultation_page.page.wait_for_timeout(2000)
+        # 等待弹窗出现
+        gst_online_consultation_page.wait(2000)
 
         # 验证弹窗标题显示
         dialog_count = gst_online_consultation_page.page.get_by_text("请选择方案类型").count()
@@ -408,7 +408,7 @@ class TestConsultationList:
         gst_online_consultation_page.send_message(test_message)
 
         # 等待发送完成
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         logger.info(f"Test passed: Message sent: {test_message}")
 
@@ -441,7 +441,7 @@ class TestConsultationListEdgeCases:
         # 搜索不存在的患者
         search_keyword = f"不存在的患者_{int(datetime.now().timestamp() * 1000)}"
         gst_online_consultation_page.search_patient(search_keyword)
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         # 验证：搜索框包含搜索关键词
         input_value = gst_online_consultation_page.get_value(
@@ -469,11 +469,11 @@ class TestConsultationListEdgeCases:
         """
         # 先搜索一个患者
         gst_online_consultation_page.search_patient("test")
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         # 清空搜索
         gst_online_consultation_page.clear_patient_search()
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         # 验证搜索框已清空
         input_value = gst_online_consultation_page.get_value(
@@ -515,7 +515,7 @@ class TestConsultationListEdgeCases:
         gst_online_consultation_page.page.get_by_role("button", name="发送").click()
 
         # 等待检查
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         logger.info("Test passed: Empty message send verified - no message sent")
 
@@ -542,12 +542,12 @@ class TestConsultationListEdgeCases:
         # 选择test02患者
         gst_online_consultation_page.select_patient_by_name("test02")
         # 等待患者详情加载
-        gst_online_consultation_page.page.wait_for_timeout(1000)
+        gst_online_consultation_page.wait(1000)
 
         # 点击结束问诊按钮
         end_button = gst_online_consultation_page.page.get_by_text("结束问诊")
         end_button.click()
-        gst_online_consultation_page.page.wait_for_timeout(1000)
+        gst_online_consultation_page.wait(1000)
 
         # 验证确认对话框弹出（查找对话框中的文字）
         dialog_text_count = gst_online_consultation_page.page.get_by_text("是否确认结束本次咨询").count()
@@ -560,7 +560,7 @@ class TestConsultationListEdgeCases:
 
         # 点击外部区域关闭对话框
         gst_online_consultation_page.page.locator("body").click()
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         logger.info("Test passed: End consultation dialog verified for ended status")
 
@@ -586,15 +586,15 @@ class TestConsultationListEdgeCases:
 
         # 点击在线开方打开对话框
         gst_online_consultation_page.page.get_by_text("在线开方").click()
-        gst_online_consultation_page.page.wait_for_timeout(2000)
+        gst_online_consultation_page.wait(2000)
 
         # 验证对话框已打开
         dialog_count = gst_online_consultation_page.page.get_by_text("请选择方案类型").count()
         assert dialog_count > 0, "Dialog should be open before closing"
 
         # 点击Close按钮关闭
-        gst_online_consultation_page.page.get_by_role("button", name="Close").click()
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.click(gst_online_consultation_page.locators.BUTTON_PRESCRIPTION_CLOSE)
+        gst_online_consultation_page.wait(500)
 
         # 验证对话框已关闭
         dialog_count_after = gst_online_consultation_page.page.get_by_text("请选择方案类型").count()
@@ -620,7 +620,7 @@ class TestConsultationListEdgeCases:
         """
         # 点击视频看诊打开二级菜单
         gst_online_consultation_page.page.get_by_text("视频看诊").first.click()
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         # 验证二级菜单打开（检查"语音问诊"选项是否可见）
         submenu_visible = gst_online_consultation_page.page.get_by_text("语音问诊").count() > 0
@@ -631,7 +631,7 @@ class TestConsultationListEdgeCases:
         except:
             # 如果找不到患者列表，点击页面其他区域
             gst_online_consultation_page.page.locator("body").click()
-        gst_online_consultation_page.page.wait_for_timeout(300)
+        gst_online_consultation_page.wait(300)
 
         # 验证二级菜单已关闭（可选，因为二级菜单可能自动关闭）
         logger.info("Test passed: Submenu closes on outside click verified")
@@ -657,19 +657,19 @@ class TestConsultationListEdgeCases:
         gst_online_consultation_page.select_patient_by_name("test02")
 
         # 等待页面稳定
-        gst_online_consultation_page.page.wait_for_timeout(500)
+        gst_online_consultation_page.wait(500)
 
         # 快速点击两次（使用first确保点击同一个按钮）
         prescribe_button = gst_online_consultation_page.page.get_by_text("在线开方").first
         for i in range(2):
             try:
                 prescribe_button.click(timeout=5000)
-                gst_online_consultation_page.page.wait_for_timeout(200)  # 增加间隔到200ms
+                gst_online_consultation_page.wait(200)  # 增加间隔到200ms
             except Exception as e:
                 logger.warning(f"Click {i+1} failed: {e}")
 
         # 等待对话框出现并稳定
-        gst_online_consultation_page.page.wait_for_timeout(1000)
+        gst_online_consultation_page.wait(1000)
 
         # 验证没有重复对话框（检查"请选择方案类型"的数量）
         dialog_count = gst_online_consultation_page.page.get_by_text("请选择方案类型").count()
@@ -677,7 +677,7 @@ class TestConsultationListEdgeCases:
 
         # 关闭对话框
         gst_online_consultation_page.page.keyboard.press("Escape")
-        gst_online_consultation_page.page.wait_for_timeout(1000)
+        gst_online_consultation_page.wait(1000)
 
         logger.info("Test passed: No duplicate dialog on rapid click verified")
 

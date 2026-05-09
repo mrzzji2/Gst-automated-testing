@@ -29,9 +29,6 @@ class OnlineConsultationPage(BasePage):
         self.page.goto(home_url)
         logger.info(f"Navigated to home page: {home_url}")
 
-        # 等待页面加载
-        self.page.wait_for_timeout(2000)
-
         # 等待患者列表出现（最多等待10秒）
         try:
             self.page.wait_for_selector(self.locators.PATIENT_LIST_ITEM, timeout=10000)
@@ -115,12 +112,9 @@ class OnlineConsultationPage(BasePage):
         Returns:
             患者数量
         """
-        # 使用正确的选择器
-        selector = "#consultList li"
-
         try:
-            count = self.page.locator(selector).count()
-            logger.info(f"Found {count} patients using selector: {selector}")
+            count = self.count_elements(self.locators.PATIENT_LIST_ITEM)
+            logger.info(f"Found {count} patients")
             return count
         except Exception as e:
             logger.warning(f"Error getting patient list: {e}")
@@ -164,14 +158,11 @@ class OnlineConsultationPage(BasePage):
         Args:
             name: 患者姓名
         """
-        # 使用正确的选择器定位患者列表项
-        selector = "#consultList li"
-
         # 等待患者列表加载
-        self.page.wait_for_selector(selector, timeout=10000)
+        self.page.wait_for_selector(self.locators.PATIENT_LIST_ITEM, timeout=10000)
 
         # 在患者列表中查找包含指定姓名的项
-        patient_items = self.page.locator(selector)
+        patient_items = self.page.locator(self.locators.PATIENT_LIST_ITEM)
         count = patient_items.count()
 
         logger.debug(f"Found {count} patient items")
@@ -198,8 +189,7 @@ class OnlineConsultationPage(BasePage):
         """
         try:
             # 获取患者列表中的第一个患者（跳过第一个，可能是小固助理）
-            selector = "#consultList li"
-            patient_items = self.page.locator(selector)
+            patient_items = self.page.locator(self.locators.PATIENT_LIST_ITEM)
             count = patient_items.count()
 
             if count <= 1:
@@ -233,14 +223,8 @@ class OnlineConsultationPage(BasePage):
         Args:
             message: 消息内容
         """
-        try:
-            input_box = self.page.locator("div:has-text('请输入内容')").last
-            input_box.fill(message)
-        except:
-            input_box = self.page.locator("[contenteditable='true']").last
-            input_box.fill(message)
-
-        self.page.get_by_role("button", name="发送").click()
+        self.fill(self.locators.MESSAGE_INPUT, message)
+        self.click(self.locators.BUTTON_SEND)
         logger.info(f"Sent message: {message}")
 
     def send_message_by_enter(self, message: str):
@@ -250,13 +234,7 @@ class OnlineConsultationPage(BasePage):
         Args:
             message: 消息内容
         """
-        try:
-            input_box = self.page.locator("div:has-text('请输入内容')").last
-            input_box.fill(message)
-        except:
-            input_box = self.page.locator("[contenteditable='true']").last
-            input_box.fill(message)
-
+        self.fill(self.locators.MESSAGE_INPUT, message)
         self.page.keyboard.press("Enter")
         logger.info(f"Sent message by Enter: {message}")
 
@@ -284,22 +262,22 @@ class OnlineConsultationPage(BasePage):
 
     def click_prescribe(self):
         """点击开方"""
-        self.page.get_by_text("在线开方").click()
+        self.click(self.locators.BUTTON_ONLINE_PRESCRIBE)
         logger.info("Clicked prescribe button")
 
     def click_video_consultation(self):
         """点击视频看诊"""
-        self.page.get_by_text("视频看诊").last.click()
+        self.page.locator(self.locators.BUTTON_VIDEO_CONSULTATION).last.click()
         logger.info("Clicked video consultation button")
 
     def click_phone_consultation(self):
         """点击电话看诊"""
-        self.page.get_by_text("电话看诊").click()
+        self.click(self.locators.BUTTON_PHONE_CONSULTATION)
         logger.info("Clicked phone consultation button")
 
     def click_end_consultation(self):
         """点击结束问诊"""
-        self.page.get_by_text("结束问诊").first.click()
+        self.page.locator(self.locators.BUTTON_END_CONSULTATION).first.click()
         logger.info("Clicked end consultation button")
 
     # ==================== 结束问诊确认 ====================
@@ -642,54 +620,3 @@ class OnlineConsultationPage(BasePage):
         result = dialog_count <= 1
         logger.info(f"Dialog count: {dialog_count}, no duplicate: {result}")
         return result
-
-    # ==================== BasePage 缺失方法补充 ====================
-
-    def get_value(self, selector: str) -> str:
-        """获取输入框值"""
-        return self.page.locator(selector).input_value()
-
-    def is_visible(self, selector: str) -> bool:
-        """检查元素是否可见"""
-        return self.page.locator(selector).is_visible()
-
-    def wait(self, timeout_ms: int):
-        """等待指定毫秒"""
-        self.page.wait_for_timeout(timeout_ms)
-
-    def count_elements(self, selector: str) -> int:
-        """统计元素数量"""
-        return self.page.locator(selector).count()
-
-    def assert_element_visible(self, selector: str):
-        """断言元素可见"""
-        self.page.wait_for_selector(selector, state="visible", timeout=30000)
-        logger.debug(f"Element is visible: {selector}")
-
-    def assert_text_contains(self, selector: str, expected: str):
-        """断言文本包含"""
-        element = self.page.locator(selector)
-        element.wait_for(state="visible", timeout=30000)
-        text = element.text_content()
-        assert expected in text, f"Expected '{expected}' in text, got: {text}"
-        logger.debug(f"Text contains: {selector} contains '{expected}'")
-
-    def fill(self, selector: str, value: str):
-        """填充表单字段"""
-        self.page.locator(selector).fill(value)
-        logger.debug(f"Filled '{value}' into: {selector}")
-
-    def clear_text(self, selector: str):
-        """清空文本"""
-        self.page.locator(selector).fill("")
-        logger.debug(f"Cleared: {selector}")
-
-    def click(self, selector: str):
-        """点击元素"""
-        self.page.locator(selector).click()
-        logger.debug(f"Clicked: {selector}")
-
-    def get_text(self, selector: str) -> str:
-        """获取元素文本"""
-        text = self.page.locator(selector).text_content()
-        return text.strip() if text else ""

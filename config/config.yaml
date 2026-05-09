@@ -1,7 +1,7 @@
 base_url: "https://doc-online-test.gstyun.cn/webClinic"
 login_path: "/login"
 #浏览器有头（false）和无头模（true）式切换
-headless: true
+headless: false
 
 selectors:
   username: "input[placeholder*='手机号']"
