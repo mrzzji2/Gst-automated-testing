@@ -16,7 +16,7 @@
 - 必须继承 `pages/base_page.py` 中的 `BasePage`
 
 ### 不需要动的文件
-- `conftest.py`：登录 fixture、失败截图、飞书通知，已配置好，不需要修改
+- `conftest.py`：登录 fixture、失败截图、企业微信通知，已配置好，不需要修改
 - `utils/`：工具函数，不需要修改
 - `config/config.yaml`：平台配置，不需要修改
 
