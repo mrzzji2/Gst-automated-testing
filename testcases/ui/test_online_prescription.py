@@ -836,3 +836,64 @@ class TestOnlinePrescription:
         prescription_page.page.keyboard.press("Escape")
         prescription_page.wait(200)
         logger.info("Test passed: Paste prescription adjuvant check verified")
+
+    @pytest.mark.P1
+    @pytest.mark.regression
+    @allure.title("十八反药材警告")
+    @allure.description("验证添加海藻与炒甘草为十八反药材时弹出警告")
+    def test_shibafan_warning(self, gst_online_consultation_page: OnlineConsultationPage):
+        """
+        测试用例：十八反药材警告 (P1)
+
+        步骤：
+        1. 选择患者 test02
+        2. 打开在线开方并选择中药饮片
+        3. 点击添加药材
+        4. 搜索并添加炒甘草 6g
+        5. 搜索并添加海藻 6g
+
+        期望结果：
+        - 添加海藻后弹出十八反警告弹窗
+        - 显示"更改药材"和"签名使用"两个按钮
+        """
+        prescription_page = PrescriptionPage(gst_online_consultation_page.page)
+
+        gst_online_consultation_page.select_patient_by_name(self.PATIENT_NAME)
+        prescription_page.click_online_prescribe()
+        prescription_page.select_prescription_type("中药饮片")
+        assert prescription_page.is_prescription_form_visible()
+
+        # 点击添加药材
+        prescription_page.click_add_medicine()
+        assert prescription_page.is_add_medicine_dialog_visible()
+
+        # 搜索并添加炒甘草 6g
+        prescription_page.search_and_add_medicine("炒甘草", "6")
+        prescription_page.wait(500)
+
+        # 搜索并添加海藻 6g（触发十八反警告）
+        prescription_page.search_and_add_medicine("海藻", "6")
+        prescription_page.wait(500)
+
+        # 验证十八反警告弹窗
+        assert prescription_page.is_visible(prescription_page.locators.SHIBAFAN_WARNING_DIALOG), \
+            "Shibafan warning dialog should be visible"
+        logger.info("Shibafan warning dialog is visible")
+
+        # 验证按钮
+        assert prescription_page.is_visible(prescription_page.locators.BTN_CHANGE_MEDICINE), \
+            "Change medicine button should be visible"
+        assert prescription_page.is_visible(prescription_page.locators.BTN_SIGN_USE), \
+            "Sign use button should be visible"
+        logger.info("Both buttons are visible")
+
+        # 点击更改药材关闭弹窗
+        prescription_page.click(prescription_page.locators.BTN_CHANGE_MEDICINE)
+        prescription_page.wait(300)
+
+        # 关闭添加药材弹窗和表单
+        prescription_page.click_cancel()
+        prescription_page.wait(200)
+        prescription_page.page.keyboard.press("Escape")
+        prescription_page.wait(200)
+        logger.info("Test passed: Shibafan warning verified")

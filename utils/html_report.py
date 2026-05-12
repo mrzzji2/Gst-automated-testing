@@ -1,16 +1,122 @@
 import os
+import json
 import base64
 import webbrowser
 from datetime import datetime
 from pathlib import Path
+from collections import defaultdict
 
 
-def generate_html_report(test_results, screenshots):
+def format_timestamp(ts: str) -> str:
+    """将 20260509_152042 格式化为 2026-05-09 15:20"""
+    return f"{ts[:4]}-{ts[4:6]}-{ts[6:8]} {ts[9:11]}:{ts[11:13]}"
+
+
+def scan_historical_reports(report_dir: Path) -> list:
+    """扫描历史报告，返回按时间倒序排列的报告列表"""
+    json_reports = {}
+    for f in report_dir.glob("*.json"):
+        try:
+            with open(f, encoding='utf-8') as fh:
+                stats = json.load(fh)
+            json_reports[stats["timestamp"]] = stats
+        except:
+            continue
+
+    for f in report_dir.glob("*.html"):
+        if f.name == "index.html":
+            continue
+        ts = f.stem
+        if ts not in json_reports:
+            json_reports[ts] = {"timestamp": ts, "no_stats": True}
+
+    reports = []
+    for ts, stats in sorted(json_reports.items(), reverse=True):
+        html_path = f"{ts}.html"
+        if (report_dir / html_path).exists():
+            reports.append({**stats, "html_path": html_path})
+    return reports
+
+
+def generate_html_report(test_results, screenshots, report_title=""):
     """生成自包含HTML报告 - 支持中文名、执行时间、按优先级分组"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_dir = Path("reports/html")
     report_dir.mkdir(parents=True, exist_ok=True)
     report_file = report_dir / f"{timestamp}.html"
+
+    # 组装标题
+    if report_title:
+        full_title = f"{report_title} 测试报告"
+    else:
+        full_title = "GST 自动化测试报告"
+
+    # 扫描历史报告
+    all_reports = scan_historical_reports(report_dir)
+    # 按日期分组（排除当前报告）
+    from collections import defaultdict
+    date_groups = defaultdict(list)
+    for r in all_reports:
+        if r["timestamp"] == timestamp:
+            continue
+        date_key = r["timestamp"][:8]  # YYYYMMDD
+        date_groups[date_key].append(r)
+    history_count = sum(len(v) for v in date_groups.values())
+
+    # 构建时间线风格 HTML
+    timeline_groups = []
+    group_idx = 0
+    for date_key in sorted(date_groups.keys(), reverse=True):
+        date_str = f"{date_key[:4]}-{date_key[4:6]}-{date_key[6:8]}"
+        reports_in_day = date_groups[date_key]
+        day_passed = sum(1 for r in reports_in_day if not r.get("no_stats") and r.get("failed", 0) == 0)
+        day_total = sum(1 for r in reports_in_day if not r.get("no_stats"))
+
+        items = []
+        for r in reports_in_day:
+            ts = r["timestamp"]
+            time_str = ts[9:11] + ":" + ts[11:13]
+            title = r.get("title", "")
+            # 状态圆点
+            if r.get("no_stats"):
+                dot = "⚪"
+                summary = "详情未知"
+            elif r["failed"] > 0:
+                dot = "🔴"
+                summary = f"❌ {r['passed']}/{r['total']} 通过, {r['failed']} 失败"
+            elif r["skipped"] > 0:
+                dot = "🟡"
+                summary = f"🟡 {r['passed']}/{r['total']} 通过, {r['skipped']} 跳过"
+            else:
+                dot = "🟢"
+                summary = f"✅ {r['passed']}/{r['total']} 通过"
+
+            items.append(f"""
+            <a href="{r['html_path']}" class="tl-item">
+                <span class="tl-dot">{dot}</span>
+                <span class="tl-line"></span>
+                <span class="tl-time">{time_str}</span>
+                <span class="tl-body">
+                    <span class="tl-title">{title}</span>
+                    <span class="tl-summary">{summary}</span>
+                </span>
+                <span class="tl-link">查看</span>
+            </a>""")
+
+        items_html = "".join(items)
+        collapsed = "collapsed"
+        timeline_groups.append(f"""
+        <div class="tl-group {collapsed}">
+            <div class="tl-date-header" onclick="toggleDateGroup(this)">
+                <span class="tl-date-label">📅 {date_str}</span>
+                <span class="tl-date-count">({len(reports_in_day)} 份)</span>
+                <span class="tl-date-arrow">▼</span>
+            </div>
+            <div class="tl-items">{items_html}</div>
+        </div>""")
+        group_idx += 1
+
+    history_html = "".join(timeline_groups) if timeline_groups else "<div class='history-empty'>暂无历史报告</div>"
 
     # 统计信息
     total = len(test_results)
@@ -72,7 +178,11 @@ def generate_html_report(test_results, screenshots):
 
         for result in tests:
             status_class = result['status']
-            error_info = f"<div class='error'>{result.get('error', '')}</div>" if result['status'] == 'failed' else ""
+            detail_info = ""
+            if result['status'] == 'failed' and result.get('error'):
+                detail_info = f"<div class='error'>{result.get('error', '')}</div>"
+            elif result['status'] == 'skipped' and result.get('error'):
+                detail_info = f"<div class='skip-reason'>⏭️ {result['error']}</div>"
 
             # 处理截图
             screenshot_html = ""
@@ -107,7 +217,7 @@ def generate_html_report(test_results, screenshots):
                 <div class="test-name">{result['name']}</div>
                 <div class="test-status {status_class}">{status_class.upper()}</div>
                 {extra_info_html}
-                {error_info}
+                {detail_info}
                 {screenshot_html}
             </div>
 """
@@ -265,6 +375,15 @@ def generate_html_report(test_results, screenshots):
             margin-top: 10px;
             border-left: 3px solid #f44336;
         }}
+        .skip-reason {{
+            color: #e67e22;
+            background: #fff8e1;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 8px;
+            border-left: 3px solid #f39c12;
+        }}
 
         /* 截图 */
         .screenshot-details {{ margin-top: 10px; }}
@@ -285,6 +404,63 @@ def generate_html_report(test_results, screenshots):
             border: 2px solid #e0e0e0;
         }}
 
+        /* 历史报告 — 时间线风格 */
+        .history-box {{
+            background: white; border-radius: 12px; margin-bottom: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden;
+        }}
+        .history-header {{
+            padding: 16px 20px; cursor: pointer; display: flex;
+            justify-content: space-between; align-items: center;
+            background: #f8f9fa; font-size: 15px; font-weight: 600; color: #555;
+            user-select: none;
+        }}
+        .history-header:hover {{ background: #f0f1f3; }}
+        .history-header .count {{ color: #999; font-weight: normal; font-size: 13px; }}
+        .history-body {{ padding: 4px 4px 8px; }}
+        .history-body.collapsed {{ display: none; }}
+        .history-empty {{ padding: 30px; text-align: center; color: #ccc; font-size: 14px; }}
+
+        /* 日期分组 */
+        .tl-group {{
+            margin: 4px 10px; border-radius: 10px; overflow: hidden;
+            border: 1px solid #f0f0f0;
+        }}
+        .tl-group.collapsed .tl-items {{ display: none; }}
+        .tl-date-header {{
+            padding: 10px 14px; cursor: pointer; display: flex;
+            align-items: center; gap: 8px; font-size: 14px; font-weight: 600;
+            color: #444; background: #fafbfc; user-select: none;
+        }}
+        .tl-date-header:hover {{ background: #f0f4ff; }}
+        .tl-date-count {{ font-weight: normal; color: #999; font-size: 13px; }}
+        .tl-date-arrow {{ margin-left: auto; font-size: 12px; color: #999; transition: transform 0.2s; }}
+        .tl-group.collapsed .tl-date-arrow {{ transform: rotate(-90deg); }}
+
+        /* 时间线条目 */
+        .tl-items {{ position: relative; padding: 0 0 6px; }}
+        .tl-item {{
+            display: flex; align-items: flex-start; padding: 8px 14px 8px 0;
+            text-decoration: none; color: #333; position: relative;
+            margin-left: 32px; transition: background 0.15s; border-radius: 8px;
+        }}
+        .tl-item:hover {{ background: #f5f7ff; }}
+        .tl-dot {{ position: absolute; left: -26px; top: 10px; font-size: 14px; z-index: 1; }}
+        .tl-line {{
+            position: absolute; left: -19px; top: 24px; bottom: -8px;
+            width: 2px; background: #e8ecf0;
+        }}
+        .tl-item:last-child .tl-line {{ display: none; }}
+        .tl-time {{ font-size: 12px; color: #888; width: 40px; flex-shrink: 0; padding-top: 2px; }}
+        .tl-body {{ flex: 1; min-width: 0; }}
+        .tl-title {{ display: inline; font-size: 13px; font-weight: 500; color: #333; }}
+        .tl-summary {{ display: inline; font-size: 12px; color: #666; margin-left: 8px; }}
+        .tl-link {{
+            font-size: 12px; color: #667eea; flex-shrink: 0;
+            padding: 2px 10px; border-radius: 4px; margin-left: 8px;
+        }}
+        .tl-item:hover .tl-link {{ background: #eef1ff; }}
+
         /* 响应式 */
         @media (max-width: 768px) {{
             .stats {{ flex-direction: column; }}
@@ -295,7 +471,16 @@ def generate_html_report(test_results, screenshots):
 </head>
 <body>
     <div class="container">
-        <h1>🤖 GST自动化测试报告</h1>
+        <div class="history-box">
+            <div class="history-header" onclick="toggleHistory()">
+                <span>📊 历史报告 <span class="count">({history_count} 份)</span></span>
+                <span id="history-arrow">▼</span>
+            </div>
+            <div class="history-body" id="history-body">
+                {history_html}
+            </div>
+        </div>
+        <h1>🤖 {full_title}</h1>
         <p style="color: #666; margin-bottom: 20px;">生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
 
         <div class="summary">
@@ -330,6 +515,20 @@ def generate_html_report(test_results, screenshots):
             content.classList.toggle('collapsed');
         }}
 
+        // 切换历史报告列表展开/收起
+        function toggleHistory() {{
+            const body = document.getElementById('history-body');
+            const arrow = document.getElementById('history-arrow');
+            body.classList.toggle('collapsed');
+            arrow.textContent = body.classList.contains('collapsed') ? '▶' : '▼';
+        }}
+
+        // 按日期分组展开/收起
+        function toggleDateGroup(header) {{
+            const group = header.closest('.tl-group');
+            group.classList.toggle('collapsed');
+        }}
+
         // 自动滚动到第一个失败用例
         document.addEventListener('DOMContentLoaded', function() {{
             const firstFailed = document.querySelector('.test-case.failed');
@@ -353,11 +552,108 @@ def generate_html_report(test_results, screenshots):
 </html>
 """
 
-    # 写入文件
+    # 写入 HTML 文件
     with open(report_file, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
+    # 保存统计信息到侧边 JSON，供索引页读取
+    stats = {
+        "timestamp": timestamp,
+        "title": full_title,
+        "total": total, "passed": passed,
+        "failed": failed, "skipped": skipped,
+        "total_duration": total_duration
+    }
+    stats_file = report_dir / f"{timestamp}.json"
+    with open(stats_file, 'w', encoding='utf-8') as f:
+        json.dump(stats, f, ensure_ascii=False)
+
     return str(report_file)
+
+
+def generate_report_index():
+    """生成历史报告索引页 - 列出所有历史测试报告"""
+    report_dir = Path("reports/html")
+    if not report_dir.exists():
+        return
+
+    reports = scan_historical_reports(report_dir)
+
+    if not reports:
+        reports_html = '<div style="text-align:center;padding:60px;color:#999;"><p>暂无测试报告</p></div>'
+    else:
+        rows = []
+        for r in reports:
+            ts = r["timestamp"]
+            dt = format_timestamp(ts)
+            if r.get("no_stats"):
+                summary = r.get("title", "📄 历史报告（详情未知）")
+            else:
+                status_icon = "✅" if r["failed"] == 0 else "❌"
+                summary = r.get("title", "") + " " if r.get("title") else ""
+                summary += f"{status_icon} {r['passed']}/{r['total']} 通过"
+                if r["failed"] > 0:
+                    summary += f", {r['failed']} 失败"
+                if r["skipped"] > 0:
+                    summary += f", {r['skipped']} 跳过"
+            link = f'<a href="{r["html_path"]}" class="report-link" target="_blank">查看</a>'
+            rows.append(f"""
+            <div class="report-row">
+                <span class="report-time">{dt}</span>
+                <span class="report-summary">{summary}</span>
+                <span class="report-link-wrap">{link}</span>
+            </div>""")
+        reports_html = "".join(rows)
+
+    index_html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{reports[0].get('title', '测试报告')} - 历史</title>
+<style>
+    * {{ margin:0; padding:0; box-sizing:border-box; }}
+    body {{
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #f5f7fa; padding: 40px 20px; color: #333;
+    }}
+    .container {{ max-width: 800px; margin:0 auto; }}
+    h1 {{ color:#2c3e50; font-size: 26px; margin-bottom:8px; }}
+    .subtitle {{ color:#888; font-size:14px; margin-bottom:30px; }}
+    .report-row {{
+        display: flex; align-items: center; padding: 16px 20px;
+        background: white; border-radius: 10px; margin-bottom: 10px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        transition: box-shadow 0.2s;
+    }}
+    .report-row:hover {{ box-shadow: 0 2px 12px rgba(0,0,0,0.1); }}
+    .report-time {{ width:160px; color:#555; font-size:14px; flex-shrink:0; }}
+    .report-summary {{ flex:1; font-size:15px; }}
+    .report-link-wrap {{ width:60px; text-align:right; }}
+    .report-link {{
+        display:inline-block; padding:6px 16px; background:#667eea;
+        color:white; border-radius:6px; text-decoration:none; font-size:13px;
+    }}
+    .report-link:hover {{ background:#5a6fd6; }}
+    .empty {{ text-align:center; padding:60px; color:#999; }}
+    @media (max-width:640px) {{
+        .report-row {{ flex-wrap:wrap; }}
+        .report-time {{ width:100%; margin-bottom:6px; }}
+    }}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 {reports[0].get('title', 'GST 自动化测试报告')}</h1>
+    <p class="subtitle">共 {len(reports)} 份报告 | 最新: {reports[0]['timestamp'][:4]}-{reports[0]['timestamp'][4:6]}-{reports[0]['timestamp'][6:8]} {reports[0]['timestamp'][9:11]}:{reports[0]['timestamp'][11:13]}</p>
+    <div class="report-list">{reports_html}</div>
+</div>
+</body>
+</html>"""
+
+    index_file = report_dir / "index.html"
+    with open(index_file, 'w', encoding='utf-8') as f:
+        f.write(index_html)
 
 
 def open_report_in_browser(report_path):

@@ -92,6 +92,11 @@ class PrescriptionLocators:
     MEDICINE_WARNING_TEXT = "text=请修改药材剂量"
     BTN_CHANGE_DOSAGE = "button:has-text('更改药材剂量')"
 
+    # ==================== 十八反药材警告弹窗 ====================
+    SHIBAFAN_WARNING_DIALOG = "text=十八反药材"
+    BTN_CHANGE_MEDICINE = "button:has-text('更改药材')"
+    BTN_SIGN_USE = "button:has-text('签名使用')"
+
     # 常用方 Tab（限定在添加药材弹窗内）
     TAB_COMMON = f"{ADD_MEDICINE_DIALOG} >> text=常用方"
     TAB_HISTORY = f"{ADD_MEDICINE_DIALOG} >> text=历史方"

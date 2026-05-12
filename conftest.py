@@ -299,6 +299,36 @@ def _ensure_screenshot_directory():
 
 
 # ---------------------------------------------------------------------------
+# 错误信息翻译（将 Playwright 英文错误转中文）
+# ---------------------------------------------------------------------------
+_ERROR_TRANSLATIONS = [
+    ("Timeout", "操作超时，页面响应过慢或元素未出现"),
+    ("strict mode violation", "选择器匹配到多个元素，请使用精确选择器"),
+    ("wait_for_selector", "等待指定元素超时，目标元素未在预期时间内出现"),
+    ("wait_for_timeout", "等待超时，页面加载或响应过慢"),
+    ("page.goto", "页面导航失败，目标网址无法访问"),
+    ("Target closed", "页面、浏览器上下文或浏览器已被关闭"),
+    ("connection refused", "网络连接被拒绝，目标服务可能未启动"),
+    ("No element found", "找不到指定元素，页面结构可能已变化"),
+    ("is not visible", "元素不可见，无法进行操作"),
+    ("is not enabled", "元素未启用，无法进行操作"),
+    ("404", "请求的资源不存在（404）"),
+    ("500", "服务器内部错误（500）"),
+    ("assert", "断言失败，实际结果与预期不符"),
+]
+
+
+def translate_error(msg: str) -> str:
+    """将常见的自动化测试错误信息翻译为中文"""
+    if not msg:
+        return msg
+    for eng, chn in _ERROR_TRANSLATIONS:
+        if eng in msg:
+            return f"【{chn}】\n{msg}"
+    return msg
+
+
+# ---------------------------------------------------------------------------
 # 测试结果收集
 # ---------------------------------------------------------------------------
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -366,7 +396,7 @@ def pytest_runtest_makereport(item, call):
             'name': item.nodeid,
             'title': title,
             'status': report.outcome,
-            'error': str(call.excinfo.value) if call.excinfo else '',
+            'error': translate_error(str(call.excinfo.value)) if call.excinfo else '',
             'duration': report.duration if hasattr(report, 'duration') else 0,
             'priority': priority or 'P2',
             'extra_info': extra_info
@@ -378,6 +408,48 @@ def pytest_runtest_makereport(item, call):
 # ---------------------------------------------------------------------------
 # 测试会话结束处理
 # ---------------------------------------------------------------------------
+def _get_report_title(test_results: list) -> str:
+    """从测试结果中提取项目名称，组装报告标题"""
+    import re
+    # 提取所有涉及的测试文件路径（去重）
+    file_paths = set()
+    for r in test_results:
+        nodeid = r.get("name", "")
+        parts = nodeid.split("::")
+        if parts:
+            file_paths.add(parts[0])
+
+    # 从每个文件的 docstring 提取项目名
+    project_names = []
+    for fp in sorted(file_paths):
+        try:
+            with open(fp, encoding="utf-8") as fh:
+                content = fh.read()
+            # 找文档注释
+            m = re.search(r'"""(.+?)"""', content, re.DOTALL)
+            if m:
+                doc = m.group(1)
+                # 在文档注释中查找包含"测试用例"的行，提取前面的文字
+                for line in doc.split("\n"):
+                    line = line.strip()
+                    if "测试用例" in line:
+                        name_m = re.match(r"^(.*?)测试用例", line)
+                        if name_m:
+                            name = name_m.group(1).strip().rstrip(" -—（(")
+                            if name and name not in project_names:
+                                project_names.append(name)
+                                break
+        except:
+            continue
+
+    if not project_names:
+        return ""
+    elif len(project_names) == 1:
+        return project_names[0]
+    else:
+        return " + ".join(project_names)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """测试会话结束时生成自动化报告样式并发送企业微信通知"""
     try:
@@ -385,47 +457,43 @@ def pytest_sessionfinish(session, exitstatus):
         reporter = session.config.pluginmanager.get_plugin('terminalreporter')
         if reporter:
             stats = reporter.stats
-            
+
             # 收集本次所有报告的 page_name 标记，用于组装企业微信标题
             all_reports = []
             for key in ("passed", "failed", "error", "skipped"):
                 all_reports.extend(stats.get(key, []))
-            
-            # 提取 page 标记
-            page_names = {
-                dict(r.user_properties).get("page_name", "")
-                for r in all_reports
-            }
-            page_names.discard("")
-            
+
             # 计算统计信息
             total = len(all_reports)
             passed = len(stats.get("passed", []))
             failed = len(stats.get("failed", [])) + len(stats.get("error", []))
             skipped = len(stats.get("skipped", []))
-            
-            # 生成智能标题
-            if len(page_names) == 1:
-                title = f"🤖 {page_names.pop()} 自动化回归测试报告"
+
+            # 从测试文件 docstring 提取项目名
+            project_title = _get_report_title(_TEST_RESULTS)
+            if project_title:
+                title = f"[GST] {project_title} 测试报告"
             else:
-                title = "🤖 自动化回归测试报告"
-            
+                title = "[GST] 自动化测试报告"
+
             # 打印报告统计
             print(f"\n{title}")
-            print(f"✅ 通过: {passed}/{total}")
-            print(f"❌ 失败: {failed}/{total}")
-            print(f"⏭️ 跳过: {skipped}/{total}")
-            
+            print(f"[PASS] 通过: {passed}/{total}")
+            print(f"[FAIL] 失败: {failed}/{total}")
+            print(f"[SKIP] 跳过: {skipped}/{total}")
+
             # 确保截图目录按日期分类
             if failed > 0:
                 _ensure_screenshot_directory()
-            
+
             # 生成并打开 HTML 报告
             try:
-                from utils.html_report import generate_html_report, open_report_in_browser
-                html_report_path = generate_html_report(_TEST_RESULTS, _SCREENSHOTS)
+                from utils.html_report import generate_html_report, generate_report_index, open_report_in_browser
+                html_report_path = generate_html_report(_TEST_RESULTS, _SCREENSHOTS, report_title=project_title)
                 if html_report_path:
                     open_report_in_browser(html_report_path)
+                # 更新历史报告索引
+                generate_report_index()
             except Exception as e:
                 print(f"\n[WARNING] HTML报告生成失败: {e}")
             

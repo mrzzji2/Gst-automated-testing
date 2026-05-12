@@ -198,7 +198,7 @@ class TestOnlineConsultation:
         # 获取test02患者姓名
         first_patient_name = gst_online_consultation_page.get_first_patient_name()
         if not first_patient_name:
-            pytest.skip("No patients available for search test")
+            pytest.skip("当前没有可用患者，跳过搜索测试")
 
         logger.info(f"Searching for patient: {first_patient_name}")
 
@@ -309,7 +309,7 @@ class TestConsultationList:
         # 获取test02患者姓名
         first_patient_name = gst_online_consultation_page.get_first_patient_name()
         if not first_patient_name:
-            pytest.skip("No patients available for search test")
+            pytest.skip("当前没有可用患者，跳过搜索测试")
 
         logger.info(f"Searching for patient: {first_patient_name}")
 
@@ -802,7 +802,7 @@ class TestOnlineConsultationEnd:
         # 检查当前状态，如果已结束则跳过
         current_status = gst_online_consultation_page.get_consultation_status()
         if current_status == "已结束":
-            pytest.skip("Consultation is already ended")
+            pytest.skip("当前问诊已结束，跳过结束问诊测试")
 
         # 点击结束问诊
         gst_online_consultation_page.click_end_consultation()
@@ -844,7 +844,7 @@ class TestOnlineConsultationEnd:
         # 检查当前状态
         current_status = gst_online_consultation_page.get_consultation_status()
         if current_status == "已结束":
-            pytest.skip("Consultation is already ended")
+            pytest.skip("当前问诊已结束，跳过结束问诊测试")
 
         # 点击结束问诊
         gst_online_consultation_page.click_end_consultation()
